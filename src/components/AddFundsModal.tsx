@@ -2,9 +2,11 @@
  * AddFundsModal — "How do you want to fund your wallet?" picker.
  * White / light mode to match the rest of the iOS-style UI.
  */
+import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X, ArrowLeftRight, CreditCard } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
+import BuyFiatSheet from '@/components/BuyFiatSheet'
 
 const springs = { modal: { type: 'spring' as const, damping: 30, stiffness: 280 } }
 
@@ -26,16 +28,20 @@ interface Props {
 }
 
 export default function AddFundsModal({ open, onClose, onBridge }: Props) {
+  const [fiatOpen, setFiatOpen] = useState(false)
+
   const handleBridge = () => {
     onClose()
     setTimeout(onBridge, 180)
   }
 
   const handleFiat = () => {
-    window.open('https://onramp.circle.com', '_blank', 'noopener,noreferrer')
+    onClose()
+    setTimeout(() => setFiatOpen(true), 180)
   }
 
   return (
+    <>
     <AnimatePresence>
       {open && (
         <motion.div
@@ -156,5 +162,11 @@ export default function AddFundsModal({ open, onClose, onBridge }: Props) {
         </motion.div>
       )}
     </AnimatePresence>
+    <BuyFiatSheet
+      open={fiatOpen}
+      onClose={() => setFiatOpen(false)}
+      onBack={() => { setFiatOpen(false); onClose() }}
+    />
+    </>
   )
 }

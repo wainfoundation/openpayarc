@@ -5,7 +5,7 @@ import {
   Grid2x2, Bell, EyeOff, Eye, ArrowDownToLine, SendHorizonal,
   ArrowLeftRight, QrCode, LayoutGrid, AlertTriangle, X,
   ShieldCheck, ChevronDown, Loader2, PiggyBank, MoreHorizontal,
-  Copy, Check, ExternalLink,
+  Copy, Check, ExternalLink, ArrowUpDown,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { TokenUSDC } from '@web3icons/react'
@@ -24,6 +24,9 @@ import AddFundsModal from '@/components/AddFundsModal'
 import BridgeSheet from '@/components/BridgeSheet'
 import SavingsSheet from '@/components/SavingsSheet'
 import LedgerSheet from '@/components/LedgerSheet'
+import SwapSheet from '@/components/SwapSheet'
+import TxReceiptModal from '@/components/TxReceiptModal'
+import { TermsModal, PrivacyModal, useTermsAccepted } from '@/components/LegalModal'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -123,7 +126,7 @@ interface Notification {
   type: 'received' | 'sent' | 'info'
 }
 
-function InboxTab({ txHistory }: { txHistory: TxRecord[] }) {
+function InboxTab({ txHistory, onTxClick }: { txHistory: TxRecord[]; onTxClick: (tx: TxRecord) => void }) {
   const [readIds, setReadIds] = useState<Set<string>>(new Set())
 
   const notifications: Notification[] = txHistory.map(tx => ({
@@ -168,10 +171,12 @@ function InboxTab({ txHistory }: { txHistory: TxRecord[] }) {
         </div>
       ) : (
         <ul className="space-y-2">
-          {notifications.map(n => (
+          {notifications.map(n => {
+            const tx = txHistory.find(t => t.hash === n.id)
+            return (
             <li
               key={n.id}
-              onClick={() => markRead(n.id)}
+              onClick={() => { markRead(n.id); if (tx) onTxClick(tx) }}
               className="flex cursor-pointer items-start gap-3 rounded-2xl bg-white p-4 shadow-sm transition-colors hover:bg-slate-50"
               style={{ border: `1px solid ${n.read ? 'var(--border)' : 'rgba(37,99,235,0.2)'}` }}
             >
@@ -199,7 +204,8 @@ function InboxTab({ txHistory }: { txHistory: TxRecord[] }) {
                 </p>
               </div>
             </li>
-          ))}
+            )
+          })}
         </ul>
       )}
     </div>
@@ -212,7 +218,7 @@ function InboxTab({ txHistory }: { txHistory: TxRecord[] }) {
 
 type TxFilter = 'all' | 'sent' | 'received'
 
-function TransactionsTab({ txHistory, chainId, onLedger }: { txHistory: TxRecord[]; chainId: number; onLedger: () => void }) {
+function TransactionsTab({ txHistory, chainId, onLedger, onTxClick }: { txHistory: TxRecord[]; chainId: number; onLedger: () => void; onTxClick: (tx: TxRecord) => void }) {
   const [filter, setFilter] = useState<TxFilter>('all')
 
   const filtered = filter === 'all' ? txHistory : txHistory.filter(t => t.direction === filter)
@@ -254,7 +260,7 @@ function TransactionsTab({ txHistory, chainId, onLedger }: { txHistory: TxRecord
         </div>
       ) : (
         <div className="rounded-2xl bg-white px-4 shadow-sm" style={{ border: '1px solid var(--border)' }}>
-          <ActivityFeed txHistory={filtered} chainId={chainId} compact />
+          <ActivityFeed txHistory={filtered} chainId={chainId} compact onTxClick={onTxClick} />
         </div>
       )}
     </div>
@@ -263,7 +269,7 @@ function TransactionsTab({ txHistory, chainId, onLedger }: { txHistory: TxRecord
 
 // ─── Profile tab ─────────────────────────────────────────────────────────────
 
-function ProfileTab({ onAdmin }: { onAdmin: () => void }) {
+function ProfileTab({ onAdmin, onTerms, onPrivacy }: { onAdmin: () => void; onTerms: () => void; onPrivacy: () => void }) {
   const { mode, chainName, isTestnet } = useNetwork()
   const { address, isConnected } = useAccount()
   const [copiedAddr, setCopiedAddr] = useState(false)
@@ -358,6 +364,24 @@ function ProfileTab({ onAdmin }: { onAdmin: () => void }) {
             </div>
           </div>
         </div>
+
+        {/* Legal */}
+        <div className="rounded-2xl bg-white shadow-sm overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+          {[
+            { label: 'Terms of Service', onClick: onTerms },
+            { label: 'Privacy Policy', onClick: onPrivacy },
+            { label: 'Support', onClick: () => window.open('mailto:support@openpay.arc', '_blank') },
+          ].map((item, i, arr) => (
+            <button key={item.label} onClick={item.onClick}
+              className="flex w-full items-center justify-between px-4 py-3.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+              style={i < arr.length - 1 ? { borderBottom: '1px solid var(--border)' } : undefined}>
+              {item.label}
+              <ChevronDown className="size-4 -rotate-90 text-slate-300" />
+            </button>
+          ))}
+        </div>
+
+        <p className="text-center text-xs text-slate-300">OpenPay Arc v1.0 · © 2026</p>
       </div>
     </div>
   )
@@ -371,7 +395,7 @@ function ServiceTabs({ active, onTab }: { active: ServiceTab; onTab: (t: Service
   const tabs: { id: ServiceTab; icon: React.ReactNode; label: string }[] = [
     { id: 'wallet',  icon: <LayoutGrid className="size-5" />, label: 'Wallet' },
     { id: 'savings', icon: <PiggyBank className="size-5" />,  label: 'Savings' },
-    { id: 'qrpay',  icon: <QrCode className="size-5" />,     label: 'QR Pay' },
+    { id: 'qrpay',  icon: <ArrowUpDown className="size-5" />, label: 'Swap' },
     { id: 'more',   icon: <MoreHorizontal className="size-5" />, label: 'More' },
   ]
   return (
@@ -423,6 +447,8 @@ function HomeScreen({
   onSeeAll,
   onSavings,
   onLedger,
+  onSwap,
+  onTxClick,
 }: {
   txHistory: TxRecord[]
   onSend: () => void
@@ -433,6 +459,8 @@ function HomeScreen({
   onSeeAll: () => void
   onSavings: () => void
   onLedger: () => void
+  onSwap: () => void
+  onTxClick: (tx: TxRecord) => void
 }) {
   const { chainId: targetChainId, isTestnet } = useNetwork()
   const { address, isConnected } = useAccount()
@@ -461,7 +489,7 @@ function HomeScreen({
 
   // When savings / QR tabs clicked in service row, open relevant sheet
   const handleServiceTab = (t: ServiceTab) => {
-    if (t === 'qrpay') { onQR(); return }
+    if (t === 'qrpay') { onSwap(); return }
     if (t === 'savings') { onSavings(); return }
     setServiceTab(t)
   }
@@ -605,7 +633,7 @@ function HomeScreen({
               const idx = parseInt(tx.counterparty.slice(2, 4), 16) % avatarColors.length
               const [bg, fg] = avatarColors[idx]
               return (
-                <li key={tx.hash} className="flex items-center gap-3 py-3">
+                <li key={tx.hash} onClick={() => onTxClick(tx)} className="flex cursor-pointer items-center gap-3 py-3 transition-colors hover:bg-slate-50 rounded-xl px-1 -mx-1">
                   <div className="flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
                     style={{ background: bg, color: fg }}>
                     {tx.name ? tx.name.slice(0, 2).toUpperCase() : tx.counterparty.slice(2, 4).toUpperCase()}
@@ -651,7 +679,7 @@ function HomeScreen({
 // ─── Root App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const { chainId: targetChainId, isTestnet, mode } = useNetwork()
+  const { chainId: targetChainId, isTestnet, mode, setMode } = useNetwork()
   const { address } = useAccount()
   const [sendOpen, setSendOpen] = useState(false)
   const [sendPrefill, setSendPrefill] = useState<string | undefined>()
@@ -663,10 +691,17 @@ export default function App() {
   const [addFundsOpen, setAddFundsOpen] = useState(false)
   const [savingsOpen, setSavingsOpen]   = useState(false)
   const [ledgerOpen,  setLedgerOpen]    = useState(false)
+  const [swapOpen,    setSwapOpen]      = useState(false)
   const [bridgeOpen, setBridgeOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<NavTab>('home')
   const [txHistory, setTxHistory] = useState<TxRecord[]>([])
   const [mainnetDismissed, setMainnetDismissed] = useState(false)
+  const [receiptTx, setReceiptTx] = useState<TxRecord | null>(null)
+  const [termsOpen, setTermsOpen] = useState(false)
+  const [privacyOpen, setPrivacyOpen] = useState(false)
+  const [mainnetConfirmOpen, setMainnetConfirmOpen] = useState(false)
+  const { accepted: termsAccepted, accept: acceptTerms } = useTermsAccepted()
+  const [termsGateOpen, setTermsGateOpen] = useState(!termsAccepted)
 
   const addTx = useCallback((tx: TxRecord) => {
     setTxHistory(prev => [tx, ...prev.filter(t => t.hash !== tx.hash).slice(0, 49)])
@@ -743,10 +778,35 @@ export default function App() {
         {/* Row 1 — brand + actions */}
         <div className="flex items-center justify-between px-4 pt-3 pb-1">
           {/* Brand mark */}
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
             <span className="display text-base font-extrabold tracking-tight" style={{ color: 'var(--ink)', letterSpacing: '-0.02em' }}>
               OpenPay<span style={{ color: '#2563eb' }}> Arc</span>
             </span>
+
+            {/* ── Network switcher pill ── */}
+            <div
+              className="flex items-center rounded-full p-0.5 text-[11px] font-bold"
+              style={{ background: '#f1f5f9', border: '1px solid rgba(0,0,0,0.07)' }}
+            >
+              <button
+                onClick={() => setMode('testnet')}
+                className="rounded-full px-2.5 py-0.5 transition-all"
+                style={isTestnet
+                  ? { background: '#2563eb', color: '#fff', boxShadow: '0 1px 4px rgba(37,99,235,0.3)' }
+                  : { color: '#64748b' }}
+              >
+                Test
+              </button>
+              <button
+                onClick={() => setMainnetConfirmOpen(true)}
+                className="rounded-full px-2.5 py-0.5 transition-all"
+                style={!isTestnet
+                  ? { background: '#16a34a', color: '#fff', boxShadow: '0 1px 4px rgba(22,163,74,0.3)' }
+                  : { color: '#64748b' }}
+              >
+                Main
+              </button>
+            </div>
           </div>
 
           {/* Right icons */}
@@ -815,11 +875,13 @@ export default function App() {
             onSeeAll={() => setActiveTab('transactions')}
             onSavings={() => setSavingsOpen(true)}
             onLedger={() => setLedgerOpen(true)}
+            onSwap={() => setSwapOpen(true)}
+            onTxClick={setReceiptTx}
           />
         )}
-        {activeTab === 'inbox' && <InboxTab txHistory={txHistory} />}
-        {activeTab === 'transactions' && <TransactionsTab txHistory={txHistory} chainId={targetChainId} onLedger={() => setLedgerOpen(true)} />}
-        {activeTab === 'profile' && <ProfileTab onAdmin={() => setAdminOpen(true)} />}
+        {activeTab === 'inbox' && <InboxTab txHistory={txHistory} onTxClick={setReceiptTx} />}
+        {activeTab === 'transactions' && <TransactionsTab txHistory={txHistory} chainId={targetChainId} onLedger={() => setLedgerOpen(true)} onTxClick={setReceiptTx} />}
+        {activeTab === 'profile' && <ProfileTab onAdmin={() => setAdminOpen(true)} onTerms={() => setTermsOpen(true)} onPrivacy={() => setPrivacyOpen(true)} />}
       </main>
 
       {/* ── Bottom nav ───────────────────────────────────────────── */}
@@ -853,10 +915,81 @@ export default function App() {
       />
       <AdminPanel open={adminOpen} onClose={() => setAdminOpen(false)} />
       <LedgerSheet open={ledgerOpen} onClose={() => setLedgerOpen(false)} />
+      <SwapSheet open={swapOpen} onClose={() => setSwapOpen(false)} />
       <SavingsSheet
         open={savingsOpen}
         onClose={() => setSavingsOpen(false)}
         savingsAddress={(import.meta.env.VITE_SAVINGS_CONTRACT_TESTNET ?? '0x8da10c3181669f4895b7aeaa59bcca4f1ef2a523') as `0x${string}`}
+      />
+
+      {/* Transaction receipt */}
+      <TxReceiptModal tx={receiptTx} onClose={() => setReceiptTx(null)} />
+
+      {/* Legal */}
+      <TermsModal open={termsOpen} onClose={() => setTermsOpen(false)} />
+      <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+
+      {/* Mainnet switch confirmation modal */}
+      <AnimatePresence>
+        {mainnetConfirmOpen && (
+          <>
+            <motion.div key="mn-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/50" style={{ backdropFilter: 'blur(6px)' }}
+              onClick={() => setMainnetConfirmOpen(false)} />
+            <div className="fixed inset-0 z-[60] flex items-center justify-center px-5 pointer-events-none">
+              <motion.div
+                key="mn-modal"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ type: 'spring', damping: 26, stiffness: 380 }}
+                className="w-full max-w-xs overflow-hidden rounded-3xl bg-white pointer-events-auto"
+                style={{ boxShadow: '0 24px 60px rgba(0,0,0,0.22)' }}
+              >
+                {/* Red warning strip */}
+                <div className="h-1.5" style={{ background: 'linear-gradient(90deg,#ef4444,#f97316,#eab308)' }} />
+                <div className="p-6">
+                  {/* Icon */}
+                  <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full" style={{ background: '#fef2f2' }}>
+                    <AlertTriangle className="size-7 text-red-500" />
+                  </div>
+                  <h2 className="text-center text-lg font-bold" style={{ color: 'var(--ink)' }}>Switch to Mainnet?</h2>
+                  <p className="mt-2 text-center text-sm leading-relaxed text-slate-500">
+                    You are about to switch to <span className="font-semibold text-green-700">Arc Mainnet</span>.
+                    This uses <span className="font-semibold">real USDC</span> with real monetary value.
+                    Transactions are <span className="font-semibold text-red-600">irreversible</span>.
+                  </p>
+                  <div className="mt-3 rounded-xl px-4 py-3 text-xs text-red-700" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+                    Double-check all addresses and amounts before confirming any transaction on mainnet.
+                  </div>
+                  <div className="mt-5 flex gap-3">
+                    <button
+                      onClick={() => setMainnetConfirmOpen(false)}
+                      className="flex-1 rounded-2xl py-3 text-sm font-semibold transition-all hover:bg-slate-100"
+                      style={{ background: '#f1f5f9', color: 'var(--ink)' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => { setMode('mainnet'); setMainnetConfirmOpen(false); setMainnetDismissed(false) }}
+                      className="flex-1 rounded-2xl py-3 text-sm font-bold text-white transition-all hover:opacity-90"
+                      style={{ background: '#16a34a' }}
+                    >
+                      Switch to Mainnet
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* First-run terms gate — non-dismissable until accepted */}
+      <TermsModal
+        open={termsGateOpen && !termsAccepted}
+        onClose={() => { /* must accept to proceed */ }}
+        onAccept={() => { acceptTerms(); setTermsGateOpen(false) }}
       />
     </div>
   )

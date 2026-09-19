@@ -48,9 +48,10 @@ interface Props {
   chainId?: number
   compact?: boolean   // compact=true: no section wrapper, no header (for embedding in HomeScreen)
   limit?: number
+  onTxClick?: (tx: TxRecord) => void
 }
 
-export default function ActivityFeed({ txHistory, chainId: chainIdProp, compact = false, limit }: Props) {
+export default function ActivityFeed({ txHistory, chainId: chainIdProp, compact = false, limit, onTxClick }: Props) {
   const { isConnected } = useAccount()
   const { chainId: networkChainId } = useNetwork()
   const chainId = chainIdProp ?? networkChainId
@@ -68,7 +69,11 @@ export default function ActivityFeed({ txHistory, chainId: chainIdProp, compact 
       {items.map((tx) => {
         const [bg, fg] = avatarColor(tx.counterparty)
         return (
-          <li key={tx.hash} className="flex items-center gap-3 py-3">
+          <li
+            key={tx.hash}
+            className={`flex items-center gap-3 py-3 ${onTxClick ? 'cursor-pointer rounded-xl px-1 transition-colors hover:bg-slate-50 active:bg-slate-100' : ''}`}
+            onClick={() => onTxClick?.(tx)}
+          >
             {/* Avatar */}
             <div
               className="flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
@@ -110,7 +115,7 @@ export default function ActivityFeed({ txHistory, chainId: chainIdProp, compact 
               <p className="text-xs text-slate-400">USDC</p>
             </div>
 
-            {!compact && (
+            {!compact && !onTxClick && (
               <a
                 href={buildTxExplorerUrl(chainId, tx.hash)}
                 target="_blank" rel="noreferrer"
