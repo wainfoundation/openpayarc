@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── ConnectKit light-mode force overrides ─────────────────────────────── */
+/* ConnectKit injects dark variables at high specificity; these win */
+[data-rk], [data-rk] *, .ck-modal, .ck-modal *,
+div[class*="ConnectKit"], div[class*="ConnectKit"] * {
+  --ck-body-background: #ffffff !important;
+  --ck-body-background-secondary: #f8faff !important;
+  --ck-body-background-tertiary: #eff6ff !important;
+  --ck-dropdown-background: #ffffff !important;
+  --ck-network-selector-background: #ffffff !important;
+  --ck-body-color: #0f172a !important;
+  --ck-body-color-muted: #64748b !important;
+}
+
+:root {
+  --bg: #f0f4ff;
+  --bg-gradient: linear-gradient(180deg, #eef2fb 0%, #f5f7ff 100%);
+  --surface: #ffffff;
+  --surface-strong: #ffffff;
+  --surface-muted: #f1f5f9;
+  --ink: #0f172a;
+  --ink-2: #1e293b;
+  --muted: #64748b;
+  --subtle: #94a3b8;
+  --border: rgba(15, 23, 42, 0.08);
+  --border-strong: rgba(15, 23, 42, 0.18);
+  --accent: #1d2f50;
+  --accent-blue: #2563eb;
+  --accent-hover: #1d4ed8;
+  --focus: #93c5fd;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --card-radius: 20px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100dvh;
+}
+
+.display { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.03em; }
+.mono { font-family: 'JetBrains Mono', Menlo, monospace; }
