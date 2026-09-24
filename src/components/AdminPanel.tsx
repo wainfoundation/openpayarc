@@ -1,20 +1,31 @@
 /**
- * AdminPanel — slide-up sheet gated by a 4-digit PIN.
+ * AdminPanel — slide-up sheet restricted to wallet 0x13c4E6e84Ac8F0443682eC9B42816EeAA2fc13B9.
  * Admin can:
  *  1. Switch active network (Arc Testnet / Arc Mainnet)
- *  2. Toggle visibility of each payment method in Buy USDC fiat flow
+ *  2. Toggle payment method visibility (PayPal, Card, Venmo, etc.)
+ *  3. Toggle feature visibility for all dashboard features
+ *  4. Toggle Connected Accounts (OpenPay) section
+ *  5. Toggle Support link in Profile
  *
- * Default PIN: 1234  (change via VITE_ADMIN_PIN in .env)
+ * Other wallets see a "Not authorised" message; non-connected users see a connect prompt.
  */
 import { useState } from 'react'
+import { useAccount } from 'wagmi'
+import { ConnectKitButton } from 'connectkit'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, ShieldCheck, AlertTriangle, Check, ChevronRight, CreditCard } from 'lucide-react'
+import {
+  X, ShieldCheck, AlertTriangle, Check, ChevronRight, CreditCard,
+  ShieldOff, Layers,
+} from 'lucide-react'
 import {
   useNetwork, type NetworkMode,
   ALL_PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethodKey,
+  ALL_FEATURES, FEATURE_LABELS,
 } from '@/NetworkContext'
 
-const ADMIN_PIN: string = (import.meta.env.VITE_ADMIN_PIN as string | undefined) ?? '1234'
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const ADMIN_WALLET = '0x13c4E6e84Ac8F0443682eC9B42816EeAA2fc13B9'.toLowerCase()
 const spectral = 'linear-gradient(90deg, #5fbeff, #af8ff4, #f05c6b, #ffcd83, #7ef1b3)'
 const springs = { sheet: { type: 'spring', damping: 32, stiffness: 300 } }
 
@@ -32,7 +43,8 @@ const glass = {
   } as React.CSSProperties,
 }
 
-// Toggle pill
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
 function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button
@@ -51,54 +63,40 @@ function Toggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   )
 }
 
-// Method icon
 function MethodIcon({ k }: { k: PaymentMethodKey }) {
   if (k === 'paypal')    return <img src="https://www.paypalobjects.com/webstatic/icon/pp258.png" alt="" className="size-5 object-contain" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
   if (k === 'card')      return <CreditCard className="size-4 text-blue-600" />
   if (k === 'venmo')     return <span className="text-sm">🔵</span>
   if (k === 'applepay')  return <span className="text-sm">🍎</span>
-  if (k === 'googlepay') return <span className="text-sm font-bold text-slate-600 text-xs">G</span>
+  if (k === 'googlepay') return <span className="text-xs font-bold text-slate-600">G</span>
   if (k === 'paylater')  return <span className="text-xs font-bold text-blue-600">PAY</span>
   return null
 }
 
-interface Props { open: boolean; onClose: () => void }
-type Step = 'pin' | 'panel'
-type PanelSection = 'network' | 'payments'
+// ─── Section types ───────────────────────────────────────────────────────────
 
-const PIN_DIGITS = ['1','2','3','4','5','6','7','8','9','','0','del']
+type PanelSection = 'network' | 'payments' | 'features'
+
+interface Props { open: boolean; onClose: () => void }
+
+// ─── Main component ──────────────────────────────────────────────────────────
 
 export default function AdminPanel({ open, onClose }: Props) {
-  const { mode, chainName, setMode, paymentMethods, setPaymentMethod } = useNetwork()
+  const { mode, chainName, setMode, paymentMethods, setPaymentMethod, features, setFeature } = useNetwork()
+  const { address, isConnected } = useAccount()
 
-  const [step, setStep]               = useState<Step>('pin')
   const [section, setSection]         = useState<PanelSection>('network')
-  const [pin, setPin]                 = useState('')
-  const [pinError, setPinError]       = useState(false)
   const [saved, setSaved]             = useState(false)
   const [pendingMode, setPendingMode] = useState<NetworkMode>(mode)
+
+  // Determine admin access
+  const isAdmin = isConnected && address?.toLowerCase() === ADMIN_WALLET
 
   const handleClose = () => {
     onClose()
     setTimeout(() => {
-      setStep('pin'); setPin(''); setPinError(false)
       setSaved(false); setPendingMode(mode); setSection('network')
     }, 300)
-  }
-
-  const handleDigit = (d: string) => {
-    if (d === 'del') { setPin(p => p.slice(0, -1)); setPinError(false); return }
-    if (d === '') return
-    const next = pin + d
-    setPin(next)
-    setPinError(false)
-    if (next.length === 4) {
-      if (next === ADMIN_PIN) {
-        setTimeout(() => { setStep('panel'); setPin('') }, 160)
-      } else {
-        setTimeout(() => { setPinError(true); setPin('') }, 160)
-      }
-    }
   }
 
   const handleSave = () => {
@@ -108,7 +106,8 @@ export default function AdminPanel({ open, onClose }: Props) {
   }
 
   const networkChanged = pendingMode !== mode
-  const enabledCount = ALL_PAYMENT_METHODS.filter(k => paymentMethods[k]).length
+  const enabledMethodCount = ALL_PAYMENT_METHODS.filter(k => paymentMethods[k]).length
+  const enabledFeatureCount = ALL_FEATURES.filter(k => features[k]).length
 
   return (
     <AnimatePresence>
@@ -121,11 +120,12 @@ export default function AdminPanel({ open, onClose }: Props) {
           <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
           <motion.section
             className="relative w-full max-w-md overflow-hidden rounded-t-3xl"
-            style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(40px) saturate(200%)', WebkitBackdropFilter: 'blur(40px) saturate(200%)', maxHeight: '90dvh', overflowY: 'auto' }}
+            style={{ background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(40px) saturate(200%)', WebkitBackdropFilter: 'blur(40px) saturate(200%)', maxHeight: '92dvh', overflowY: 'auto' }}
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={springs.sheet}
             onClick={e => e.stopPropagation()}
           >
+            {/* Rainbow strip */}
             <div className="h-1" style={{ background: spectral }} />
             <div className="flex justify-center pt-3 pb-1">
               <div className="h-1 w-10 rounded-full bg-black/10" />
@@ -136,63 +136,60 @@ export default function AdminPanel({ open, onClose }: Props) {
               <div className="mb-5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="size-5" style={{ color: 'var(--accent)' }} />
-                  <h2 className="text-lg font-bold" style={{ fontFamily: 'Space Grotesk, sans-serif', color: 'var(--ink)' }}>Admin</h2>
+                  <h2 className="text-lg font-bold" style={{ fontFamily: 'Space Grotesk, sans-serif', color: 'var(--ink)' }}>Admin Panel</h2>
                 </div>
                 <button onClick={handleClose} className="flex size-8 items-center justify-center rounded-full" style={{ background: 'var(--surface-muted)' }}>
                   <X className="size-4" style={{ color: 'var(--muted)' }} />
                 </button>
               </div>
 
-              {/* PIN entry */}
-              {step === 'pin' && (
-                <div className="space-y-5">
-                  <p className="text-sm" style={{ color: 'var(--muted)' }}>Enter your 4-digit admin PIN to continue.</p>
-                  <div className="flex justify-center gap-4">
-                    {[0,1,2,3].map(i => (
-                      <motion.div
-                        key={i}
-                        animate={pinError ? { x: [0,-6,6,-4,4,0] } : {}}
-                        transition={{ duration: 0.35 }}
-                        className="size-4 rounded-full transition-colors"
-                        style={{ background: pin.length > i ? (pinError ? 'var(--danger)' : 'var(--accent)') : 'rgba(18,45,69,0.12)' }}
-                      />
-                    ))}
+              {/* ── Not connected ── */}
+              {!isConnected && (
+                <div className="flex flex-col items-center gap-4 py-8 text-center">
+                  <ShieldOff className="size-12 text-slate-300" />
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>Wallet required</p>
+                    <p className="mt-1 text-xs text-slate-400">Connect the authorised admin wallet to access this panel.</p>
                   </div>
-                  {pinError && <p className="text-center text-xs font-semibold" style={{ color: 'var(--danger)' }}>Incorrect PIN. Try again.</p>}
-                  <div className="grid grid-cols-3 gap-2">
-                    {PIN_DIGITS.map((d, i) => (
-                      <button
-                        key={i}
-                        onClick={() => handleDigit(d)}
-                        disabled={d === '' || pin.length >= 4}
-                        className="flex h-14 items-center justify-center rounded-2xl text-lg font-semibold transition-all hover:scale-[1.04] active:scale-[0.96] disabled:pointer-events-none disabled:opacity-0"
-                        style={glass.inner}
-                      >
-                        <span style={{ color: 'var(--ink)' }}>{d === 'del' ? '⌫' : d}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-center text-xs" style={{ color: 'var(--subtle)' }}>
-                    Default PIN is 1234. Set <span className="font-mono font-semibold">VITE_ADMIN_PIN</span> in .env to change.
-                  </p>
+                  <ConnectKitButton />
                 </div>
               )}
 
-              {/* Admin panel */}
-              {step === 'panel' && (
+              {/* ── Connected but not admin ── */}
+              {isConnected && !isAdmin && (
+                <div className="flex flex-col items-center gap-4 py-8 text-center">
+                  <div className="flex size-14 items-center justify-center rounded-full" style={{ background: '#fef2f2' }}>
+                    <ShieldOff className="size-7 text-red-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-red-600">Not authorised</p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Admin access is restricted to a specific wallet.<br />
+                      Connected: <span className="font-mono">{address?.slice(0,8)}…{address?.slice(-4)}</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Admin panel ── */}
+              {isAdmin && (
                 <div className="space-y-4">
                   {/* Section tabs */}
-                  <div className="flex gap-1 rounded-2xl p-1" style={{ background: 'rgba(18,45,69,0.06)' }}>
-                    {(['network', 'payments'] as PanelSection[]).map(s => (
+                  <div className="grid grid-cols-3 gap-1 rounded-2xl p-1" style={{ background: 'rgba(18,45,69,0.06)' }}>
+                    {([
+                      { id: 'network' as PanelSection,  label: 'Network' },
+                      { id: 'payments' as PanelSection, label: `Pay (${enabledMethodCount})` },
+                      { id: 'features' as PanelSection, label: `Features (${enabledFeatureCount})` },
+                    ]).map(s => (
                       <button
-                        key={s}
-                        onClick={() => setSection(s)}
-                        className="flex-1 rounded-xl py-2 text-xs font-semibold transition-all"
-                        style={section === s
+                        key={s.id}
+                        onClick={() => setSection(s.id)}
+                        className="rounded-xl py-2 text-xs font-semibold transition-all"
+                        style={section === s.id
                           ? { background: 'white', color: 'var(--accent)', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }
                           : { color: 'var(--muted)' }}
                       >
-                        {s === 'network' ? 'Network' : `Payment Methods (${enabledCount}/${ALL_PAYMENT_METHODS.length})`}
+                        {s.label}
                       </button>
                     ))}
                   </div>
@@ -263,9 +260,8 @@ export default function AdminPanel({ open, onClose }: Props) {
                   {section === 'payments' && (
                     <div className="space-y-3">
                       <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                        Toggle which payment methods appear in the Buy USDC fiat flow. Disabled methods are hidden from users.
+                        Toggle which payment methods appear in the Buy USDC fiat flow.
                       </p>
-
                       <div className="rounded-2xl" style={glass.card}>
                         <p className="px-4 pt-4 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--muted)' }}>Payment Methods</p>
                         <div className="mt-2 divide-y divide-black/5 px-4 pb-2">
@@ -274,10 +270,8 @@ export default function AdminPanel({ open, onClose }: Props) {
                             const enabled = paymentMethods[key]
                             return (
                               <div key={key} className="flex items-center gap-3 py-3">
-                                <div
-                                  className="flex size-9 shrink-0 items-center justify-center rounded-full"
-                                  style={{ background: enabled ? 'rgba(29,47,80,0.07)' : 'rgba(0,0,0,0.04)', opacity: enabled ? 1 : 0.45 }}
-                                >
+                                <div className="flex size-9 shrink-0 items-center justify-center rounded-full"
+                                  style={{ background: enabled ? 'rgba(29,47,80,0.07)' : 'rgba(0,0,0,0.04)', opacity: enabled ? 1 : 0.45 }}>
                                   <MethodIcon k={key} />
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -290,23 +284,82 @@ export default function AdminPanel({ open, onClose }: Props) {
                           })}
                         </div>
                       </div>
-
-                      {enabledCount === 0 && (
+                      {enabledMethodCount === 0 && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                           className="flex gap-3 rounded-2xl p-3"
                           style={{ background: 'rgba(186,43,76,0.06)', border: '1px solid rgba(186,43,76,0.15)' }}>
                           <AlertTriangle className="mt-0.5 size-4 shrink-0" style={{ color: 'var(--danger)' }} />
-                          <p className="text-xs" style={{ color: 'var(--danger)' }}>
-                            All payment methods are disabled. Users won't be able to buy USDC via fiat.
-                          </p>
+                          <p className="text-xs" style={{ color: 'var(--danger)' }}>All payment methods disabled — users can't buy USDC via fiat.</p>
                         </motion.div>
                       )}
+                      <p className="text-center text-xs" style={{ color: 'var(--subtle)' }}>Changes apply immediately and persist across sessions.</p>
+                    </div>
+                  )}
+
+                  {/* ── Features section ── */}
+                  {section === 'features' && (
+                    <div className="space-y-3">
+                      <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                        Show or hide any feature across the dashboard. Hidden features disappear from all UI surfaces immediately.
+                      </p>
+
+                      {/* Quick bulk actions */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => ALL_FEATURES.forEach(k => setFeature(k, true))}
+                          className="flex-1 rounded-xl py-2 text-xs font-semibold transition-all hover:opacity-80"
+                          style={{ background: '#dcfce7', color: '#16a34a' }}
+                        >
+                          Enable all
+                        </button>
+                        <button
+                          onClick={() => ALL_FEATURES.forEach(k => setFeature(k, false))}
+                          className="flex-1 rounded-xl py-2 text-xs font-semibold transition-all hover:opacity-80"
+                          style={{ background: '#fee2e2', color: '#dc2626' }}
+                        >
+                          Hide all
+                        </button>
+                      </div>
+
+                      <div className="rounded-2xl" style={glass.card}>
+                        <p className="px-4 pt-4 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--muted)' }}>
+                          Dashboard Features
+                        </p>
+                        <div className="mt-2 divide-y divide-black/5 px-4 pb-2">
+                          {ALL_FEATURES.map(key => {
+                            const { label, sub } = FEATURE_LABELS[key]
+                            const enabled = features[key]
+                            return (
+                              <div key={key} className="flex items-center gap-3 py-3">
+                                <div className="flex size-9 shrink-0 items-center justify-center rounded-full"
+                                  style={{ background: enabled ? 'rgba(29,47,80,0.07)' : 'rgba(0,0,0,0.04)', opacity: enabled ? 1 : 0.45 }}>
+                                  <Layers className="size-4" style={{ color: enabled ? 'var(--accent)' : 'var(--subtle)' }} />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-semibold" style={{ color: enabled ? 'var(--ink)' : 'var(--muted)' }}>{label}</p>
+                                  <p className="text-xs" style={{ color: 'var(--subtle)' }}>{sub}</p>
+                                </div>
+                                <Toggle on={enabled} onToggle={() => setFeature(key, !enabled)} />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
 
                       <p className="text-center text-xs" style={{ color: 'var(--subtle)' }}>
                         Changes apply immediately and persist across sessions.
                       </p>
                     </div>
                   )}
+
+                  {/* Admin identity badge */}
+                  <div className="flex items-center gap-2 rounded-2xl px-3 py-2.5 mt-2"
+                    style={{ background: 'rgba(37,99,235,0.05)', border: '1px solid rgba(37,99,235,0.12)' }}>
+                    <ShieldCheck className="size-4 shrink-0 text-blue-500" />
+                    <p className="font-mono text-[10px] text-blue-600 truncate">
+                      Admin: {address?.slice(0, 10)}…{address?.slice(-6)}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

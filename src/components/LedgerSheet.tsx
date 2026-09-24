@@ -73,8 +73,8 @@ function avatarPair(addr: string): [string, string] {
 // ─── Hook: fetch onchain ledger ───────────────────────────────────────────────
 
 const CHUNK_SIZE  = 500n       // max blocks per getLogs call (Arc RPC limit)
-const N_CHUNKS    = 10         // scan up to 10 chunks (5 000 blocks) per page
-const MAX_ENTRIES = 200
+const N_CHUNKS    = 4          // scan up to 4 chunks (2 000 blocks) per page — avoids rate-limit on initial load
+const MAX_ENTRIES = 100
 
 interface UseLedgerResult {
   entries:  LedgerEntry[]
@@ -135,9 +135,13 @@ function useLedger(address: `0x${string}` | undefined): UseLedgerResult {
         type TLog = { transactionHash?: `0x${string}`; blockNumber?: bigint; logIndex?: number; args?: { from?: `0x${string}`; to?: `0x${string}`; value?: bigint } }
         const allLogs: TLog[] = []
         let chunkTo = windowEnd
+        let chunkIdx = 0
         while (chunkTo >= windowStart) {
           const chunkFrom = chunkTo >= CHUNK_SIZE ? chunkTo - CHUNK_SIZE + 1n : 0n
           const clampedFrom = chunkFrom < windowStart ? windowStart : chunkFrom
+          // Stagger requests slightly after the first chunk to avoid burst rate-limit
+          if (chunkIdx > 0) await new Promise(r => setTimeout(r, 300))
+          chunkIdx++
           const [sent, recv] = await Promise.all([
             client.getLogs({
               address: usdcAddress,
@@ -404,15 +408,17 @@ export default function LedgerSheet({ open, onClose }: Props) {
                   href={buildAddressExplorerUrl(chainId, address)}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 hover:bg-slate-100 transition-colors"
+                  className="flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 hover:bg-slate-100 transition-colors overflow-hidden"
                   style={{ border: '1px solid var(--border)' }}
                 >
                   <div className="flex size-8 shrink-0 items-center justify-center rounded-lg"
                     style={{ background: '#dbeafe', color: '#2563eb' }}>
                     <span className="text-xs font-bold">{address.slice(2, 4).toUpperCase()}</span>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate" style={{ color: 'var(--ink)' }}>{address}</p>
+                  <div className="min-w-0 flex-1 overflow-hidden">
+                    <p className="text-xs font-semibold text-slate-700">
+                      {address.slice(0, 10)}…{address.slice(-8)}
+                    </p>
                     <p className="text-[10px] text-slate-400">View on {isTestnet ? 'Arc Testnet Explorer' : 'Arc Explorer'}</p>
                   </div>
                   <ExternalLink className="size-4 shrink-0 text-slate-400" />
@@ -431,7 +437,9 @@ export default function LedgerSheet({ open, onClose }: Props) {
                   </div>
                   <div className="min-w-0 flex-1 text-left">
                     <p className="text-xs font-semibold text-blue-700">USDC Contract</p>
-                    <p className="text-[10px] text-blue-500 truncate">{usdcFact.address}</p>
+                    <p className="text-[10px] text-blue-500">
+                      {usdcFact.address.slice(0, 10)}…{usdcFact.address.slice(-8)}
+                    </p>
                   </div>
                   <ChevronDown className={`size-4 text-blue-400 transition-transform ${showInfo ? 'rotate-180' : ''}`} />
                 </button>
@@ -489,9 +497,13 @@ export default function LedgerSheet({ open, onClose }: Props) {
               {error && (
                 <div className="flex items-start gap-2 rounded-2xl bg-red-50 p-4" style={{ border: '1px solid #fecaca' }}>
                   <AlertCircle className="size-4 mt-0.5 shrink-0 text-red-500" />
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-red-700">Failed to load transactions</p>
-                    <p className="text-xs text-red-500 mt-0.5">{error}</p>
+                    <p className="text-xs text-red-500 mt-0.5 line-clamp-2 break-words">
+                      {error.includes('rate limit') || error.includes('LimitExceeded')
+                        ? 'RPC rate limit reached. Please wait a moment and try again.'
+                        : error.replace(/URL: https?:\/\/\S+/g, '').replace(/Details:[^.]+\./g, '').trim().slice(0, 120)}
+                    </p>
                     <button onClick={refresh} className="mt-2 text-xs font-semibold text-red-600 hover:underline">Try again</button>
                   </div>
                 </div>

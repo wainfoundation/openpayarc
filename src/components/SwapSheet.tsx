@@ -43,12 +43,11 @@ function kitChain(chainId: number): SwapChain {
 
 /**
  * Tokens available on Arc. USDC and NATIVE are the same asset on Arc —
- * that pair is rejected before routing.
+ * that pair is rejected before routing. USDT is not deployed on Arc.
  */
 const ARC_TOKENS = [
-  { symbol: 'USDC', label: 'USDC',  color: '#2775CA', emoji: '💵' },
-  { symbol: 'EURC', label: 'EURC',  color: '#0052B4', emoji: '💶' },
-  { symbol: 'USDT', label: 'USDT',  color: '#26A17B', emoji: '💴' },
+  { symbol: 'USDC', label: 'USDC', color: '#2775CA', emoji: '💵' },
+  { symbol: 'EURC', label: 'EURC', color: '#0052B4', emoji: '💶' },
 ]
 
 type Token = typeof ARC_TOKENS[number]
@@ -221,10 +220,8 @@ export default function SwapSheet({ open, onClose }: SwapSheetProps) {
   const usdcAddress = (usdcFact?.address ?? '0x0') as `0x${string}`
   const eurcAddr = eurcAddress(chainId) as `0x${string}`
 
-  const tokenInAddress = tokenIn.symbol === 'USDC' ? usdcAddress
-    : tokenIn.symbol === 'EURC' ? eurcAddr : usdcAddress
-  const tokenOutAddress = tokenOut.symbol === 'USDC' ? usdcAddress
-    : tokenOut.symbol === 'EURC' ? eurcAddr : usdcAddress
+  const tokenInAddress = tokenIn.symbol === 'EURC' ? eurcAddr : usdcAddress
+  const tokenOutAddress = tokenOut.symbol === 'EURC' ? eurcAddr : usdcAddress
 
   const { data: balanceIn } = useReadContract({
     address: tokenInAddress,

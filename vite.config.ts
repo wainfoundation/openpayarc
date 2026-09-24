@@ -43,10 +43,20 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/wallet/, ''),
       },
+      '/api/onramp': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/onramp/, '/onramp'),
+      },
       '/api/paypal': {
         target: 'http://localhost:3001',
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/paypal/, '/paypal'),
+      },
+      '/api/openpay': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/openpay/, '/openpay'),
       },
     },
   },

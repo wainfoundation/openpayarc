@@ -6,14 +6,16 @@
  */
 import { useState, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Loader2, ExternalLink, ArrowRight, ArrowLeftRight } from 'lucide-react'
+import { X, Loader2, ExternalLink, ArrowRight, ArrowLeftRight, ChevronLeft, AlertTriangle } from 'lucide-react'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useReadContract } from 'wagmi'
-import { erc20Abi, isAddress } from 'viem'
+import { erc20Abi, isAddress, parseUnits } from 'viem'
 import { getUsdc, buildTxExplorerUrl, requireChain } from '@/onchain-facts'
 import { Amount, parseAmount, usdcDecimalsFor } from '@/onchain-money'
 import { TokenUSDC } from '@web3icons/react'
 import { useNetwork } from '@/NetworkContext'
 import type { TxRecord } from './ActivityFeed'
+import { useNetworkFee } from '@/hooks/useNetworkFee'
+import { FEE_WALLET, calcPlatformFee, formatFee } from '@/hooks/usePlatformFee'
 
 const springs = { sheet: { type: 'spring', damping: 32, stiffness: 300 } }
 
@@ -34,7 +36,8 @@ interface Props {
 }
 
 export default function TransferSheet({ open, onClose, prefillTo, onTxSent }: Props) {
-  const { chainId: targetChainId, chainName } = useNetwork()
+  const { chainId: targetChainId, chainName, isTestnet } = useNetwork()
+  const { feeUSDC, isLoading: feeLoading } = useNetworkFee()
   const { address, chainId } = useAccount()
   const { switchChain } = useSwitchChain()
 
@@ -54,9 +57,14 @@ export default function TransferSheet({ open, onClose, prefillTo, onTxSent }: Pr
     ? Amount.fromRaw(rawBalance, usdcDecimalsFor(targetChainId)).toFixed(2)
     : null
 
+  const [phase, setPhase] = useState<'form' | 'review' | 'sending'>('form')
   const [recipient, setRecipient] = useState(prefillTo ?? '')
   const [amount, setAmount] = useState('')
   const [memo, setMemo] = useState('')
+
+  const decimals = usdcDecimalsFor(targetChainId)
+  const platformFee = calcPlatformFee(amount)
+  const platformFeeDisplay = formatFee(amount)
 
   // Sync prefillTo when it changes
   useEffect(() => {
@@ -68,50 +76,57 @@ export default function TransferSheet({ open, onClose, prefillTo, onTxSent }: Pr
   const amountNum = parseFloat(amount)
   const amountValid = !isNaN(amountNum) && amountNum > 0
 
-  const { writeContract, data: hash, isPending, isError, error, reset } = useWriteContract()
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
-  const txUrl = hash ? buildTxExplorerUrl(targetChainId, hash) : null
+  // Fee tx (step 1)
+  const { writeContract: writeFee, data: feeHash, isPending: feePending, isError: feeError, error: feeErr, reset: resetFee } = useWriteContract()
+  const { isLoading: feeConfirming, isSuccess: feeSuccess } = useWaitForTransactionReceipt({ hash: feeHash })
+
+  // Main tx (step 2)
+  const { writeContract: writeMain, data: mainHash, isPending: mainPending, isError: mainError, error: mainErr, reset: resetMain } = useWriteContract()
+  const { isLoading: mainConfirming, isSuccess } = useWaitForTransactionReceipt({ hash: mainHash })
+
+  const isPending = feePending || mainPending
+  const isConfirming = feeConfirming || mainConfirming
+  const isError = feeError || mainError
+  const error = feeErr ?? mainErr
+  const txUrl = mainHash ? buildTxExplorerUrl(targetChainId, mainHash) : null
   const explorerName = requireChain(targetChainId).explorerBase.includes('testnet') ? 'ArcScan Testnet' : 'ArcScan'
 
-  // Fire callback once confirmed
+  // After fee confirmed → send main transfer
   useEffect(() => {
-    if (isSuccess && hash && onTxSent) {
-      onTxSent({
-        hash,
-        direction: 'sent',
-        amount: parseFloat(amount).toFixed(2),
-        counterparty: recipient,
-        timestamp: Date.now(),
-        memo,
-      })
+    if (feeSuccess) {
+      let parsed: Amount
+      try { parsed = parseAmount(targetChainId, amount) } catch { return }
+      writeMain({ address: USDC_ADDRESS, abi: erc20Abi, functionName: 'transfer', args: [recipient as `0x${string}`, parsed.raw], chainId: targetChainId })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feeSuccess])
+
+  // Fire callback once main confirmed
+  useEffect(() => {
+    if (isSuccess && mainHash && onTxSent) {
+      onTxSent({ hash: mainHash, direction: 'sent', amount: parseFloat(amount).toFixed(2), counterparty: recipient, timestamp: Date.now(), memo })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSuccess])
 
   const handleClose = () => {
     if (!isPending && !isConfirming) {
-      setRecipient('')
-      setAmount('')
-      setMemo('')
-      reset()
-      onClose()
+      setRecipient(''); setAmount(''); setMemo(''); setPhase('form'); resetFee(); resetMain(); onClose()
     }
   }
 
-  const handleSend = () => {
+  const handleReview = () => {
     if (isWrongChain) { switchChain({ chainId: targetChainId }); return }
-    let parsed: Amount
-    try { parsed = parseAmount(targetChainId, amount) } catch { return }
-    writeContract({
-      address: USDC_ADDRESS,
-      abi: erc20Abi,
-      functionName: 'transfer',
-      args: [recipient as `0x${string}`, parsed.raw],
-      chainId: targetChainId,
-    })
+    setPhase('review')
   }
 
-  const ready = recipientValid && amountValid && !isPending && !isConfirming && !isSuccess
+  const handleConfirm = () => {
+    setPhase('sending')
+    const feeRaw = parseUnits(platformFee.toFixed(6), decimals)
+    writeFee({ address: USDC_ADDRESS, abi: erc20Abi, functionName: 'transfer', args: [FEE_WALLET, feeRaw], chainId: targetChainId })
+  }
+
+
 
   return (
     <AnimatePresence>
@@ -171,6 +186,56 @@ export default function TransferSheet({ open, onClose, prefillTo, onTxSent }: Pr
                     style={{ background: 'var(--accent)' }}>
                     Done
                   </button>
+                </div>
+              ) : phase === 'review' ? (
+                /* ── Review ── */
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <button onClick={() => setPhase('form')} className="flex size-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200">
+                      <ChevronLeft className="size-4" />
+                    </button>
+                    <p className="font-semibold text-slate-700">Review Transfer</p>
+                  </div>
+                  <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                    {[
+                      { label: 'To',           value: `${recipient.slice(0,10)}…${recipient.slice(-8)}`, mono: true },
+                      { label: 'Amount',        value: `${amount} USDC`, highlight: true },
+                      { label: 'Network',       value: chainName },
+                      ...(memo ? [{ label: 'Note', value: memo }] : []),
+                      { label: 'Platform fee (1%)', value: platformFeeDisplay, subtle: true },
+                      { label: 'Network fee',   value: feeLoading ? 'Estimating…' : (feeUSDC ?? '~$0.00 USDC'), subtle: true },
+                    ].map((r, i, arr) => (
+                      <div key={r.label} className="flex items-center justify-between bg-white px-4 py-3" style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{r.label}</span>
+                        <span className={`text-sm font-semibold ${'mono' in r && r.mono ? 'font-mono text-xs' : ''}`}
+                          style={{ color: 'highlight' in r && r.highlight ? '#2563eb' : 'subtle' in r && r.subtle ? 'var(--muted)' : 'var(--ink)' }}>
+                          {r.value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {!isTestnet && (
+                    <div className="flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
+                      <AlertTriangle className="size-4 shrink-0 text-red-500" />
+                      <p className="text-xs font-semibold text-red-600">Mainnet — real USDC. This cannot be reversed.</p>
+                    </div>
+                  )}
+                  {isError && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-xs font-medium text-red-600">{parseOnchainError(error)}</p>}
+                  <button onClick={handleConfirm} disabled={isPending || isConfirming}
+                    className="w-full rounded-2xl py-3.5 text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-40"
+                    style={{ background: 'var(--accent)' }}>
+                    {feePending
+                      ? <span className="flex items-center justify-center gap-2"><Loader2 className="size-4 animate-spin" /> Confirm fee in wallet…</span>
+                      : feeConfirming
+                      ? <span className="flex items-center justify-center gap-2"><Loader2 className="size-4 animate-spin" /> Processing fee…</span>
+                      : mainPending
+                      ? <span className="flex items-center justify-center gap-2"><Loader2 className="size-4 animate-spin" /> Confirm transfer in wallet…</span>
+                      : mainConfirming
+                      ? <span className="flex items-center justify-center gap-2"><Loader2 className="size-4 animate-spin" /> Confirming…</span>
+                      : <span className="flex items-center justify-center gap-1.5">Confirm Transfer <ArrowRight className="size-4" /></span>
+                    }
+                  </button>
+                  <button onClick={() => setPhase('form')} className="w-full rounded-2xl py-3 text-sm font-semibold text-slate-500 hover:bg-slate-50">Cancel</button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -238,18 +303,14 @@ export default function TransferSheet({ open, onClose, prefillTo, onTxSent }: Pr
                   )}
 
                   <button
-                    disabled={!ready || (!isWrongChain && (!recipientValid || !amountValid))}
-                    onClick={handleSend}
+                    disabled={!recipientValid || !amountValid}
+                    onClick={handleReview}
                     className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ background: 'var(--accent)' }}
                   >
-                    {isPending
-                      ? <span className="flex items-center justify-center gap-2"><Loader2 className="size-4 animate-spin" /> Confirm in wallet...</span>
-                      : isConfirming
-                      ? <span className="flex items-center justify-center gap-2"><Loader2 className="size-4 animate-spin" /> Confirming...</span>
-                      : isWrongChain
+                    {isWrongChain
                       ? `Switch to ${chainName}`
-                      : <span className="flex items-center justify-center gap-1.5">Transfer <ArrowRight className="size-4" /></span>
+                      : <span className="flex items-center justify-center gap-1.5">Review <ArrowRight className="size-4" /></span>
                     }
                   </button>
                 </div>

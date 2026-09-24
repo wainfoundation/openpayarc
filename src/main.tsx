@@ -19,11 +19,21 @@ import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ConnectKitProvider } from 'connectkit'
 import { Toaster } from 'sonner'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { config } from './config'
 import App from './App'
+import CheckoutPage from './components/CheckoutPage'
 import { NetworkProvider } from './NetworkContext'
 
 import './index.css'
+
+// Apply persisted theme before first render to avoid flash
+;(function () {
+  try {
+    const t = localStorage.getItem('openpay-theme') ?? 'light'
+    document.documentElement.setAttribute('data-theme', t)
+  } catch { /* noop */ }
+})()
 
 const queryClient = new QueryClient()
 
@@ -31,10 +41,11 @@ const queryClient = new QueryClient()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <NetworkProvider>
-      <WagmiProvider config={config}>
-        <QueryClientProvider client={queryClient}>
-          <ConnectKitProvider
+    <BrowserRouter>
+      <NetworkProvider>
+        <WagmiProvider config={config}>
+          <QueryClientProvider client={queryClient}>
+            <ConnectKitProvider
             theme="auto"
             mode="light"
             customTheme={{
@@ -89,13 +100,17 @@ createRoot(document.getElementById('root')!).render(
               "--ck-connectbutton-active-background": "#1e3a6e",
               "--ck-connectbutton-balance-color": "#ffffff",
             }}
-          >
-            <App />
-            <Toaster position="top-center" />
-          </ConnectKitProvider>
-        </QueryClientProvider>
-      </WagmiProvider>
-    </NetworkProvider>
+            >
+              <Routes>
+                <Route path="/pay/:requestId" element={<CheckoutPage />} />
+                <Route path="*" element={<App />} />
+              </Routes>
+              <Toaster position="top-center" />
+            </ConnectKitProvider>
+          </QueryClientProvider>
+        </WagmiProvider>
+      </NetworkProvider>
+    </BrowserRouter>
   </StrictMode>,
 )
 

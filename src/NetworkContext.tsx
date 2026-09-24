@@ -36,6 +36,55 @@ const DEFAULT_METHODS: PaymentMethodsConfig = {
   paypal: true, card: true, venmo: true, applepay: true, googlepay: true, paylater: true,
 }
 
+// ─── Feature flags (admin-controlled, persisted) ─────────────────────────────
+
+export type FeatureFlagKey =
+  | 'send'
+  | 'receive'
+  | 'transfer'
+  | 'swap'
+  | 'bridge'
+  | 'savings'
+  | 'payLinks'
+  | 'ledger'
+  | 'buyFiat'
+  | 'connectedAccounts'
+  | 'support'
+  | 'inbox'
+  | 'transactions'
+  | 'scanner'
+
+export const ALL_FEATURES: FeatureFlagKey[] = [
+  'send', 'receive', 'transfer', 'swap', 'bridge', 'savings',
+  'payLinks', 'ledger', 'buyFiat', 'connectedAccounts', 'support',
+  'inbox', 'transactions', 'scanner',
+]
+
+export const FEATURE_LABELS: Record<FeatureFlagKey, { label: string; sub: string }> = {
+  send:              { label: 'Send USDC',          sub: 'Send funds to any address' },
+  receive:           { label: 'Receive / QR',        sub: 'Show receive QR and address' },
+  transfer:          { label: 'Transfer',            sub: 'Same-chain USDC transfer' },
+  swap:              { label: 'Swap',                sub: 'Token swap via Circle App Kit' },
+  bridge:            { label: 'Bridge',              sub: 'CCTP cross-chain bridge' },
+  savings:           { label: 'Savings',             sub: 'OpenPaySavings vault' },
+  payLinks:          { label: 'Pay Links / QR',      sub: 'Embeddable eCommerce checkout' },
+  ledger:            { label: 'Ledger',              sub: 'Onchain USDC transfer history' },
+  buyFiat:           { label: 'Buy USDC (Fiat)',     sub: 'PayPal / card onramp' },
+  connectedAccounts: { label: 'Connected Accounts',  sub: 'OpenPay OAuth link' },
+  support:           { label: 'Support',             sub: 'Support link in Profile' },
+  inbox:             { label: 'Inbox tab',           sub: 'Notification inbox' },
+  transactions:      { label: 'Transactions tab',    sub: 'Full tx history tab' },
+  scanner:           { label: 'QR Scanner',          sub: 'Camera QR code scanner' },
+}
+
+export type FeatureFlagsConfig = Record<FeatureFlagKey, boolean>
+
+const DEFAULT_FEATURES: FeatureFlagsConfig = {
+  send: true, receive: true, transfer: true, swap: true, bridge: true,
+  savings: true, payLinks: true, ledger: true, buyFiat: true,
+  connectedAccounts: true, support: true, inbox: true, transactions: true, scanner: true,
+}
+
 export interface NetworkContextValue {
   mode: NetworkMode
   chainId: number
@@ -44,12 +93,15 @@ export interface NetworkContextValue {
   setMode: (mode: NetworkMode) => void
   paymentMethods: PaymentMethodsConfig
   setPaymentMethod: (key: PaymentMethodKey, enabled: boolean) => void
+  features: FeatureFlagsConfig
+  setFeature: (key: FeatureFlagKey, enabled: boolean) => void
 }
 
 const NetworkContext = createContext<NetworkContextValue | null>(null)
 
-const NETWORK_KEY = 'openpay:network'
-const METHODS_KEY = 'openpay:payment-methods'
+const NETWORK_KEY  = 'openpay:network'
+const METHODS_KEY  = 'openpay:payment-methods'
+const FEATURES_KEY = 'openpay:features'
 
 function readStoredMode(): NetworkMode {
   try {
@@ -70,9 +122,21 @@ function readStoredMethods(): PaymentMethodsConfig {
   return { ...DEFAULT_METHODS }
 }
 
+function readStoredFeatures(): FeatureFlagsConfig {
+  try {
+    const raw = localStorage.getItem(FEATURES_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<FeatureFlagsConfig>
+      return { ...DEFAULT_FEATURES, ...parsed }
+    }
+  } catch { /* ignore */ }
+  return { ...DEFAULT_FEATURES }
+}
+
 export function NetworkProvider({ children }: { children: ReactNode }) {
-  const [mode, setModeState] = useState<NetworkMode>(readStoredMode)
+  const [mode, setModeState]           = useState<NetworkMode>(readStoredMode)
   const [paymentMethods, setMethodsState] = useState<PaymentMethodsConfig>(readStoredMethods)
+  const [features, setFeaturesState]   = useState<FeatureFlagsConfig>(readStoredFeatures)
 
   const setMode = useCallback((next: NetworkMode) => {
     setModeState(next)
@@ -87,6 +151,14 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const setFeature = useCallback((key: FeatureFlagKey, enabled: boolean) => {
+    setFeaturesState(prev => {
+      const next = { ...prev, [key]: enabled }
+      try { localStorage.setItem(FEATURES_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+      return next
+    })
+  }, [])
+
   const chainId = CHAIN_IDS[mode]
   const chainName = requireChain(chainId).name
 
@@ -94,6 +166,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
     <NetworkContext.Provider value={{
       mode, chainId, chainName, isTestnet: mode === 'testnet', setMode,
       paymentMethods, setPaymentMethod,
+      features, setFeature,
     }}>
       {children}
     </NetworkContext.Provider>

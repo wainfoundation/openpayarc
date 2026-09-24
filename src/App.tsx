@@ -5,13 +5,14 @@ import {
   Grid2x2, Bell, EyeOff, Eye, ArrowDownToLine, SendHorizonal,
   ArrowLeftRight, QrCode, LayoutGrid, AlertTriangle, X,
   ShieldCheck, ChevronDown, Loader2, PiggyBank, MoreHorizontal,
-  Copy, Check, ExternalLink, ArrowUpDown,
+  Copy, Check, ExternalLink, ArrowUpDown, Link2, BookOpen, Sun, Moon,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { TokenUSDC } from '@web3icons/react'
 import { ConnectKitButton } from 'connectkit'
 import { getUsdc, buildTxExplorerUrl } from '@/onchain-facts'
 import { Amount, parseAmount, usdcDecimalsFor } from '@/onchain-money'
+
 import { useNetwork } from '@/NetworkContext'
 import SendSheet from '@/components/SendSheet'
 import ReceiveSheet from '@/components/ReceiveSheet'
@@ -27,6 +28,30 @@ import LedgerSheet from '@/components/LedgerSheet'
 import SwapSheet from '@/components/SwapSheet'
 import TxReceiptModal from '@/components/TxReceiptModal'
 import { TermsModal, PrivacyModal, useTermsAccepted } from '@/components/LegalModal'
+import OpenPayConnect, { useOpenPayAccount } from '@/components/OpenPayConnect'
+import QRPaySheet from '@/components/QRPaySheet'
+import { OUSDSwapSheet } from '@/components/OUSDSwapSheet'
+import OUSDInfoSheet from '@/components/OUSDInfoSheet'
+import OUSDIcon from '@/components/OUSDIcon'
+import { useTheme } from '@/hooks/useTheme'
+
+const OUSD_BLUE = '#0D47D1'
+const OUSD_LIGHT = '#E8EFFE'
+const OUSD_BORDER = '#C5D5F8'
+
+// ─── OUSD constants ───────────────────────────────────────────────────────────
+const OUSD_DECIMALS = 6
+const OUSD_ADDRESSES_MAP: Record<number, { token: `0x${string}` }> = {
+  5042002: { token: '0xdd9cb6cbe39f5caf475241124e749875d7e7b355' },
+  5042:    { token: '0x0000000000000000000000000000000000000000' }, // TODO: replace after mainnet deploy
+}
+function getOusdToken(chainId: number): `0x${string}` {
+  return OUSD_ADDRESSES_MAP[chainId]?.token ?? '0x0000000000000000000000000000000000000000'
+}
+function isOusdDeployed(chainId: number): boolean {
+  const addr = getOusdToken(chainId)
+  return addr !== '0x0000000000000000000000000000000000000000'
+}
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -269,10 +294,134 @@ function TransactionsTab({ txHistory, chainId, onLedger, onTxClick }: { txHistor
 
 // ─── Profile tab ─────────────────────────────────────────────────────────────
 
-function ProfileTab({ onAdmin, onTerms, onPrivacy }: { onAdmin: () => void; onTerms: () => void; onPrivacy: () => void }) {
-  const { mode, chainName, isTestnet } = useNetwork()
+// ─── Support sheet ────────────────────────────────────────────────────────────
+
+function SupportSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const faqs = [
+    { q: 'How do I send USDC?', a: 'Tap "Send funds" on the home screen, enter a wallet address or scan a QR code, enter the amount and confirm.' },
+    { q: 'What is the platform fee?', a: 'OpenPay Arc charges 1% per transaction (minimum $0.01, maximum $5.00 USDC). Fees are displayed before you confirm any transaction.' },
+    { q: 'How do I create a payment link?', a: 'Go to Pay Links from the home screen, tap "Create Payment Request", fill in the amount and memo, and share the generated link or QR code.' },
+    { q: 'What chains are supported?', a: 'OpenPay Arc runs on Arc (mainnet and testnet). Arc uses USDC as its native gas token for fast, low-cost transactions.' },
+    { q: 'How do I get test USDC?', a: 'On testnet, click "Get test USDC" in the Arc Studio sidebar, or tap the faucet link shown on the home screen balance card.' },
+    { q: 'How does Savings work?', a: 'Savings deposits earn yield via the OpenPaySavings vault on Arc. You can deposit, withdraw, and claim rewards at any time.' },
+    { q: 'Is this app open source?', a: 'OpenPay Arc is built on Arc Studio using Circle\'s USDC infrastructure. Source is available on GitHub.' },
+  ]
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-end justify-center"
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          onClick={onClose}
+        >
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+          <motion.section
+            className="relative w-full max-w-md overflow-hidden rounded-t-3xl"
+            style={{ background: 'white', maxHeight: '90dvh', overflowY: 'auto' }}
+            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 32, stiffness: 300 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="h-1" style={{ background: 'linear-gradient(90deg,#5fbeff,#af8ff4,#f05c6b,#ffcd83,#7ef1b3)' }} />
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="h-1 w-10 rounded-full bg-black/10" />
+            </div>
+
+            <div className="px-5 pb-10 pt-2">
+              <div className="mb-5 flex items-center justify-between">
+                <h2 className="text-lg font-bold" style={{ color: 'var(--ink)', fontFamily: 'Space Grotesk, sans-serif' }}>Support</h2>
+                <button onClick={onClose} className="flex size-8 items-center justify-center rounded-full" style={{ background: '#f1f5f9' }}>
+                  <X className="size-4 text-slate-400" />
+                </button>
+              </div>
+
+              {/* Contact CTA */}
+              <div className="mb-5 overflow-hidden rounded-2xl" style={{ background: 'linear-gradient(135deg,#1d2f50,#2d4a7a)' }}>
+                <div className="p-5">
+                  <p className="text-sm font-bold text-white">Need help?</p>
+                  <p className="mt-0.5 text-xs text-blue-200">Our support team is here for you.</p>
+                  <div className="mt-4 flex gap-2">
+                    <a
+                      href="mailto:support@openpay.arc"
+                      className="flex-1 rounded-xl py-2.5 text-center text-xs font-semibold text-white transition-all hover:opacity-90"
+                      style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.2)' }}
+                    >
+                      Email support
+                    </a>
+                    <a
+                      href="https://docs.arc.io"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-1 rounded-xl py-2.5 text-center text-xs font-semibold transition-all hover:opacity-90"
+                      style={{ background: 'white', color: '#1d2f50' }}
+                    >
+                      Arc docs
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* FAQ */}
+              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Frequently asked questions</p>
+              <div className="space-y-2">
+                {faqs.map((faq, i) => (
+                  <FaqItem key={i} q={faq.q} a={faq.a} />
+                ))}
+              </div>
+            </div>
+          </motion.section>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white shadow-sm" style={{ border: '1px solid var(--border)' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center justify-between px-4 py-3.5 text-left text-sm font-semibold transition-colors hover:bg-slate-50"
+        style={{ color: 'var(--ink)' }}
+      >
+        {q}
+        <ChevronDown className={`size-4 shrink-0 text-slate-300 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <p className="px-4 pb-4 text-xs leading-relaxed text-slate-500">{a}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ─── Profile tab ─────────────────────────────────────────────────────────────
+
+function ProfileTab({
+  onAdmin, onTerms, onPrivacy, onOpenPay, openPayConnected, onSupport, onOusdInfo, onOusd,
+}: {
+  onAdmin: () => void
+  onTerms: () => void
+  onPrivacy: () => void
+  onOpenPay: () => void
+  openPayConnected: boolean
+  onSupport: () => void
+  onOusdInfo: () => void
+  onOusd: () => void
+}) {
+  const { mode, chainName, isTestnet, features, chainId: profileChainId } = useNetwork()
   const { address, isConnected } = useAccount()
+  const ousdReadyOnCurrentNetwork = isOusdDeployed(profileChainId)
   const [copiedAddr, setCopiedAddr] = useState(false)
+  const { isDark, toggle: toggleTheme } = useTheme()
 
   const copyAddress = () => {
     if (!address) return
@@ -282,13 +431,20 @@ function ProfileTab({ onAdmin, onTerms, onPrivacy }: { onAdmin: () => void; onTe
     }).catch(() => undefined)
   }
 
+  // Legal row — always show terms/privacy; support is feature-gated
+  const legalItems = [
+    { label: 'Terms of Service', onClick: onTerms },
+    { label: 'Privacy Policy', onClick: onPrivacy },
+    ...(features.support ? [{ label: 'Support', onClick: onSupport }] : []),
+  ]
+
   return (
     <div className="px-4 pb-28 pt-4">
       <h2 className="mb-4 text-xl font-bold" style={{ color: 'var(--ink)' }}>Profile</h2>
 
       <div className="space-y-3">
         {/* Avatar + name card */}
-        <div className="rounded-2xl bg-white p-5 text-center shadow-sm" style={{ border: '1px solid var(--border)' }}>
+        <div className="rounded-2xl p-5 text-center shadow-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
           <div className="mx-auto flex size-16 items-center justify-center rounded-full text-xl font-bold"
             style={{ background: '#dbeafe', color: '#2563eb' }}>
             {address ? address.slice(2, 4).toUpperCase() : 'U'}
@@ -314,7 +470,7 @@ function ProfileTab({ onAdmin, onTerms, onPrivacy }: { onAdmin: () => void; onTe
         </div>
 
         {/* Wallet connect */}
-        <div className="rounded-2xl bg-white p-4 shadow-sm" style={{ border: '1px solid var(--border)' }}>
+        <div className="rounded-2xl p-4 shadow-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Wallet</p>
           <div className="flex items-center justify-between">
             <div>
@@ -329,7 +485,7 @@ function ProfileTab({ onAdmin, onTerms, onPrivacy }: { onAdmin: () => void; onTe
         </div>
 
         {/* Network card */}
-        <div className="rounded-2xl bg-white p-4 shadow-sm" style={{ border: '1px solid var(--border)' }}>
+        <div className="rounded-2xl p-4 shadow-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Network</p>
           <div className="flex items-center gap-2">
             <div className="size-2.5 rounded-full" style={{ background: isTestnet ? '#2563eb' : '#16a34a' }} />
@@ -341,11 +497,42 @@ function ProfileTab({ onAdmin, onTerms, onPrivacy }: { onAdmin: () => void; onTe
           </div>
         </div>
 
+        {/* Theme toggle */}
+        <div className="rounded-2xl p-4 shadow-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>Appearance</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              {isDark
+                ? <Moon className="size-5" style={{ color: 'var(--accent-blue)' }} />
+                : <Sun className="size-5 text-amber-500" />}
+              <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                {isDark ? 'Dark mode' : 'Light mode'}
+              </span>
+            </div>
+            {/* Pill toggle */}
+            <button
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              className="relative flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-300"
+              style={{ background: isDark ? '#0D47D1' : '#e2e8f0' }}
+            >
+              <span
+                className="absolute flex size-5 items-center justify-center rounded-full bg-white shadow-md transition-transform duration-300"
+                style={{ transform: isDark ? 'translateX(22px)' : 'translateX(4px)' }}
+              >
+                {isDark
+                  ? <Moon className="size-3 text-blue-700" />
+                  : <Sun className="size-3 text-amber-500" />}
+              </span>
+            </button>
+          </div>
+        </div>
+
         {/* Admin entry */}
         <button
           onClick={onAdmin}
-          className="flex w-full items-center gap-3 rounded-2xl bg-white p-4 shadow-sm transition-colors hover:bg-slate-50"
-          style={{ border: '1px solid var(--border)' }}
+          className="flex w-full items-center gap-3 rounded-2xl p-4 shadow-sm transition-colors hover:opacity-80"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
         >
           <div className="flex size-9 items-center justify-center rounded-xl bg-slate-100">
             <ShieldCheck className="size-5" style={{ color: 'var(--accent)' }} />
@@ -355,7 +542,7 @@ function ProfileTab({ onAdmin, onTerms, onPrivacy }: { onAdmin: () => void; onTe
         </button>
 
         {/* USDC info */}
-        <div className="rounded-2xl bg-white p-4 shadow-sm" style={{ border: '1px solid var(--border)' }}>
+        <div className="rounded-2xl p-4 shadow-sm" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
           <div className="flex items-center gap-3">
             <TokenUSDC variant="branded" size={32} />
             <div>
@@ -365,21 +552,93 @@ function ProfileTab({ onAdmin, onTerms, onPrivacy }: { onAdmin: () => void; onTe
           </div>
         </div>
 
-        {/* Legal */}
-        <div className="rounded-2xl bg-white shadow-sm overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-          {[
-            { label: 'Terms of Service', onClick: onTerms },
-            { label: 'Privacy Policy', onClick: onPrivacy },
-            { label: 'Support', onClick: () => window.open('mailto:support@openpay.arc', '_blank') },
-          ].map((item, i, arr) => (
-            <button key={item.label} onClick={item.onClick}
-              className="flex w-full items-center justify-between px-4 py-3.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
-              style={i < arr.length - 1 ? { borderBottom: '1px solid var(--border)' } : undefined}>
-              {item.label}
-              <ChevronDown className="size-4 -rotate-90 text-slate-300" />
-            </button>
-          ))}
+        {/* OUSD card */}
+        <div className="overflow-hidden rounded-2xl shadow-sm" style={{ border: `1px solid ${OUSD_BORDER}`, background: OUSD_LIGHT }}>
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <OUSDIcon size={36} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold" style={{ color: OUSD_BLUE }}>OpenPay OpenUSD</p>
+              <p className="text-xs" style={{ color: '#4C7BEE' }}>
+                OUSD · 1:1 USD · {isTestnet ? 'Arc Testnet' : 'Arc Mainnet'} · ERC-20
+                {!ousdReadyOnCurrentNetwork && ' · Coming soon'}
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                onClick={onOusdInfo}
+                className="rounded-xl px-3 py-1.5 text-xs font-bold transition-colors hover:opacity-80"
+                style={{ background: 'white', color: OUSD_BLUE, border: `1px solid ${OUSD_BORDER}` }}
+              >
+                Whitepaper
+              </button>
+              {ousdReadyOnCurrentNetwork && (
+                <button
+                  onClick={onOusd}
+                  className="rounded-xl px-3 py-1.5 text-xs font-bold text-white transition-colors hover:opacity-80"
+                  style={{ background: OUSD_BLUE }}
+                >
+                  Swap
+                </button>
+              )}
+            </div>
+          </div>
+          {/* Stats row */}
+          <div className="grid grid-cols-3 border-t" style={{ borderColor: OUSD_BORDER }}>
+            {[
+              { label: 'Peg', value: '$1.00' },
+              { label: 'Backed', value: '100%' },
+              { label: 'Swap fee', value: '1%' },
+            ].map((s, i, arr) => (
+              <div key={s.label}
+                className="flex flex-col items-center py-2.5"
+                style={i < arr.length - 1 ? { borderRight: `1px solid ${OUSD_BORDER}` } : undefined}>
+                <span className="text-sm font-bold" style={{ color: OUSD_BLUE }}>{s.value}</span>
+                <span className="text-[10px]" style={{ color: '#4C7BEE' }}>{s.label}</span>
+              </div>
+            ))}
+          </div>
         </div>
+
+        {/* Connected Accounts — feature-gated */}
+        {features.connectedAccounts && (
+          <div className="rounded-2xl bg-white shadow-sm overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Connected Accounts</p>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="flex size-8 items-center justify-center rounded-full bg-blue-100">
+                  <span className="text-xs font-bold text-blue-600">OP</span>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">OpenPay</p>
+                  <p className="text-xs text-slate-400">{openPayConnected ? 'Connected' : 'Not connected'}</p>
+                </div>
+              </div>
+              <button onClick={onOpenPay}
+                className="rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors"
+                style={openPayConnected
+                  ? { background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0' }
+                  : { background: 'var(--accent)', color: 'white' }}>
+                {openPayConnected ? 'Connected ✓' : 'Connect'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Legal / Support */}
+        {legalItems.length > 0 && (
+          <div className="rounded-2xl bg-white shadow-sm overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+            {legalItems.map((item, i, arr) => (
+              <button key={item.label} onClick={item.onClick}
+                className="flex w-full items-center justify-between px-4 py-3.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                style={i < arr.length - 1 ? { borderBottom: '1px solid var(--border)' } : undefined}>
+                {item.label}
+                <ChevronDown className="size-4 -rotate-90 text-slate-300" />
+              </button>
+            ))}
+          </div>
+        )}
 
         <p className="text-center text-xs text-slate-300">OpenPay Arc v1.0 · © 2026</p>
       </div>
@@ -392,14 +651,16 @@ function ProfileTab({ onAdmin, onTerms, onPrivacy }: { onAdmin: () => void; onTe
 type ServiceTab = 'wallet' | 'savings' | 'qrpay' | 'more'
 
 function ServiceTabs({ active, onTab }: { active: ServiceTab; onTab: (t: ServiceTab) => void }) {
-  const tabs: { id: ServiceTab; icon: React.ReactNode; label: string }[] = [
-    { id: 'wallet',  icon: <LayoutGrid className="size-5" />, label: 'Wallet' },
-    { id: 'savings', icon: <PiggyBank className="size-5" />,  label: 'Savings' },
-    { id: 'qrpay',  icon: <ArrowUpDown className="size-5" />, label: 'Swap' },
+  const { features } = useNetwork()
+  const allTabs: { id: ServiceTab; icon: React.ReactNode; label: string; featureKey?: string }[] = [
+    { id: 'wallet',  icon: <LayoutGrid className="size-5" />,    label: 'Wallet' },
+    { id: 'savings', icon: <PiggyBank className="size-5" />,     label: 'Savings',   featureKey: 'savings' },
+    { id: 'qrpay',  icon: <QrCode className="size-5" />,         label: 'Pay Links', featureKey: 'payLinks' },
     { id: 'more',   icon: <MoreHorizontal className="size-5" />, label: 'More' },
   ]
+  const tabs = allTabs.filter(t => !t.featureKey || features[t.featureKey as keyof typeof features])
   return (
-    <div className="grid grid-cols-4 gap-1">
+    <div className={`grid gap-1`} style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
       {tabs.map(t => {
         const isActive = t.id === active
         return (
@@ -448,6 +709,10 @@ function HomeScreen({
   onSavings,
   onLedger,
   onSwap,
+  onQRPay,
+  onSupport,
+  onOusd,
+  onOusdInfo,
   onTxClick,
 }: {
   txHistory: TxRecord[]
@@ -460,9 +725,13 @@ function HomeScreen({
   onSavings: () => void
   onLedger: () => void
   onSwap: () => void
+  onQRPay: () => void
+  onSupport: () => void
+  onOusd: () => void
+  onOusdInfo: () => void
   onTxClick: (tx: TxRecord) => void
 }) {
-  const { chainId: targetChainId, isTestnet } = useNetwork()
+  const { chainId: targetChainId, isTestnet, features } = useNetwork()
   const { address, isConnected } = useAccount()
   const [balanceHidden, setBalanceHidden] = useState(false)
   const [serviceTab, setServiceTab] = useState<ServiceTab>('wallet')
@@ -485,11 +754,25 @@ function HomeScreen({
     ? Amount.fromRaw(rawBalance, usdcDecimalsFor(targetChainId)).toFixed(2)
     : null
 
+  // OUSD balance — shown on both networks, disabled when not yet deployed
+  const ousdTokenAddr = getOusdToken(targetChainId)
+  const ousdDeployed  = isOusdDeployed(targetChainId)
+  const { data: rawOusdBalance, isLoading: ousdBalanceLoading } = useReadContract({
+    address: ousdTokenAddr,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) && ousdDeployed, refetchInterval: 10_000 },
+  })
+  const formattedOusdBalance = rawOusdBalance != null
+    ? (Number(rawOusdBalance) / 10 ** OUSD_DECIMALS).toFixed(2)
+    : null
+
   const recentTx = txHistory.slice(0, 3)
 
   // When savings / QR tabs clicked in service row, open relevant sheet
   const handleServiceTab = (t: ServiceTab) => {
-    if (t === 'qrpay') { onSwap(); return }
+    if (t === 'qrpay') { onQRPay(); return }
     if (t === 'savings') { onSavings(); return }
     setServiceTab(t)
   }
@@ -531,12 +814,48 @@ function HomeScreen({
             )}
           </div>
 
-          <div className="mb-4 flex items-center gap-1.5">
+          <div className="mb-2 flex items-center gap-1.5">
             <TokenUSDC variant="branded" size={14} />
             <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               {isTestnet ? 'USDC · Testnet' : 'USDC'}
             </span>
           </div>
+
+          {/* OUSD balance row — shown on both networks */}
+          {isConnected && (
+            <div className="mb-4 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: OUSD_LIGHT, border: `1px solid ${OUSD_BORDER}` }}>
+              <OUSDIcon size={20} />
+              {!ousdDeployed ? (
+                <span className="text-xs font-semibold" style={{ color: OUSD_BLUE }}>
+                  OUSD · Coming to Mainnet
+                </span>
+              ) : ousdBalanceLoading ? (
+                <div className="h-3 w-16 animate-pulse rounded" style={{ background: OUSD_BORDER }} />
+              ) : (
+                <span className="text-xs font-bold tabular-nums" style={{ color: OUSD_BLUE }}>
+                  {balanceHidden ? '••••' : `${formattedOusdBalance ?? '0.00'} OUSD`}
+                </span>
+              )}
+              <div className="ml-auto flex items-center gap-1">
+                <button
+                  onClick={onOusdInfo}
+                  className="rounded-lg px-2 py-0.5 text-[10px] font-bold transition-colors hover:opacity-80"
+                  style={{ background: OUSD_BORDER, color: OUSD_BLUE }}
+                >
+                  About
+                </button>
+                {ousdDeployed && (
+                  <button
+                    onClick={onOusd}
+                    className="rounded-lg px-2 py-0.5 text-[10px] font-bold transition-colors hover:opacity-80"
+                    style={{ background: OUSD_BLUE, color: 'white' }}
+                  >
+                    Swap
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-3">
             <button
@@ -562,12 +881,22 @@ function HomeScreen({
 
         {/* Quick action icon row */}
         <div className="border-t px-4 py-4" style={{ borderColor: 'var(--border)' }}>
-          <div className="flex justify-between">
-            <QuickAction icon={<SendHorizonal className="size-5" />} label="Pay" onClick={onSend} />
-            <QuickAction icon={<ArrowLeftRight className="size-5" />} label="Transfer" onClick={onTransfer} />
-            <QuickAction icon={<ArrowDownToLine className="size-5" />} label="Receive" onClick={onReceive} />
-            <QuickAction icon={<QrCode className="size-5" />} label="Scan" onClick={onQR} />
+          <div className="flex justify-around">
+            {features.send     && <QuickAction icon={<SendHorizonal className="size-5" />} label="Pay" onClick={onSend} />}
+            {features.transfer && <QuickAction icon={<ArrowLeftRight className="size-5" />} label="Transfer" onClick={onTransfer} />}
+            {features.receive  && <QuickAction icon={<ArrowDownToLine className="size-5" />} label="Receive" onClick={onReceive} />}
+            {features.scanner  && <QuickAction icon={<QrCode className="size-5" />} label="Scan" onClick={onQR} />}
           </div>
+          {/* Second row — only render if at least one item is visible */}
+          {(features.swap || features.payLinks || features.savings || features.ledger) && (
+            <div className="mt-3 pt-3 border-t flex justify-around" style={{ borderColor: 'var(--border)' }}>
+              {features.swap     && <QuickAction icon={<ArrowUpDown className="size-5" />} label="Swap" onClick={onSwap} />}
+              {features.swap     && <QuickAction icon={<OUSDIcon size={20} />} label="OUSD" onClick={onOusd} />}
+              {features.payLinks && <QuickAction icon={<Link2 className="size-5" />} label="Pay Links" onClick={onQRPay} />}
+              {features.savings  && <QuickAction icon={<PiggyBank className="size-5" />} label="Savings" onClick={onSavings} />}
+              {features.ledger   && <QuickAction icon={<LayoutGrid className="size-5" />} label="Ledger" onClick={onLedger} />}
+            </div>
+          )}
         </div>
       </div>
 
@@ -588,12 +917,28 @@ function HomeScreen({
         )}
         {serviceTab === 'more' && (
           <div className="mt-4 grid grid-cols-3 gap-2">
-            {['Statements', 'Support', 'Settings'].map(item => (
-              <button key={item} className="flex flex-col items-center gap-1.5 rounded-xl bg-slate-50 py-3 text-xs font-semibold text-slate-500 hover:bg-slate-100">
-                <MoreHorizontal className="size-5" />
-                {item}
-              </button>
-            ))}
+            <button onClick={onLedger} className="flex flex-col items-center gap-1.5 rounded-xl bg-slate-50 py-3 text-xs font-semibold text-slate-500 hover:bg-slate-100 transition-colors">
+              <LayoutGrid className="size-5" />
+              Statements
+            </button>
+            <button onClick={onSupport} className="flex flex-col items-center gap-1.5 rounded-xl bg-slate-50 py-3 text-xs font-semibold text-slate-500 hover:bg-slate-100 transition-colors">
+              <MoreHorizontal className="size-5" />
+              Support
+            </button>
+            <button onClick={onSwap} className="flex flex-col items-center gap-1.5 rounded-xl bg-slate-50 py-3 text-xs font-semibold text-slate-500 hover:bg-slate-100 transition-colors">
+              <ArrowUpDown className="size-5" />
+              Swap
+            </button>
+            <button onClick={onOusd} className="flex flex-col items-center gap-1.5 rounded-xl py-3 text-xs font-semibold transition-colors hover:opacity-80"
+              style={{ background: OUSD_LIGHT, color: OUSD_BLUE }}>
+              <OUSDIcon size={20} />
+              OpenUSD
+            </button>
+            <button onClick={onOusdInfo} className="flex flex-col items-center gap-1.5 rounded-xl py-3 text-xs font-semibold transition-colors hover:opacity-80"
+              style={{ background: OUSD_LIGHT, color: OUSD_BLUE }}>
+              <BookOpen className="size-5" />
+              Whitepaper
+            </button>
           </div>
         )}
       </div>
@@ -692,6 +1037,9 @@ export default function App() {
   const [savingsOpen, setSavingsOpen]   = useState(false)
   const [ledgerOpen,  setLedgerOpen]    = useState(false)
   const [swapOpen,    setSwapOpen]      = useState(false)
+  const [qrPayOpen,   setQrPayOpen]     = useState(false)
+  const [ousdOpen,    setOusdOpen]      = useState(false)
+  const [ousdInfoOpen, setOusdInfoOpen] = useState(false)
   const [bridgeOpen, setBridgeOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<NavTab>('home')
   const [txHistory, setTxHistory] = useState<TxRecord[]>([])
@@ -699,6 +1047,9 @@ export default function App() {
   const [receiptTx, setReceiptTx] = useState<TxRecord | null>(null)
   const [termsOpen, setTermsOpen] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
+  const [openPayOpen, setOpenPayOpen] = useState(false)
+  const [supportOpen, setSupportOpen] = useState(false)
+  const { account: openPayAccount } = useOpenPayAccount()
   const [mainnetConfirmOpen, setMainnetConfirmOpen] = useState(false)
   const { accepted: termsAccepted, accept: acceptTerms } = useTermsAccepted()
   const [termsGateOpen, setTermsGateOpen] = useState(!termsAccepted)
@@ -746,8 +1097,12 @@ export default function App() {
 
   // Scanner → pre-fill send sheet with scanned address
   const handleScanResult = (addr: string) => {
-    setSendPrefill(addr)
-    setSendOpen(true)
+    setScannerOpen(false)
+    // Small delay lets the scanner slide out before the send sheet slides in
+    setTimeout(() => {
+      setSendPrefill(addr)
+      setSendOpen(true)
+    }, 320)
   }
 
   const openScanner = () => setScannerOpen(true)
@@ -755,12 +1110,20 @@ export default function App() {
   const inboxCount = txHistory.filter(t => t.direction === 'received').length
 
   return (
-    <div className="relative min-h-dvh" style={{ background: 'var(--bg-gradient)' }}>
+    <div className="app-shell">
 
       {/* ── Top header ──────────────────────────────────────────── */}
       <header
-        className="sticky top-0 z-30 mx-auto max-w-md"
-        style={{ background: 'rgba(255,255,255,0.96)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: '1px solid rgba(0,0,0,0.06)' }}
+        className="sticky top-0 z-30 w-full"
+        style={{
+          background: 'rgba(255,255,255,0.97)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          borderBottom: '1px solid rgba(0,0,0,0.06)',
+          paddingTop: 'env(safe-area-inset-top, 0px)',
+          paddingLeft: 'env(safe-area-inset-left, 0px)',
+          paddingRight: 'env(safe-area-inset-right, 0px)',
+        }}
       >
         {/* Mainnet warning */}
         <AnimatePresence>
@@ -776,7 +1139,7 @@ export default function App() {
         </AnimatePresence>
 
         {/* Row 1 — brand + actions */}
-        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+        <div className="flex items-center justify-between px-3 sm:px-4 pt-3 pb-1 gap-2">
           {/* Brand mark */}
           <div className="flex items-center gap-2">
             <span className="display text-base font-extrabold tracking-tight" style={{ color: 'var(--ink)', letterSpacing: '-0.02em' }}>
@@ -810,7 +1173,7 @@ export default function App() {
           </div>
 
           {/* Right icons */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1">
             {/* Notification bell */}
             <button
               onClick={() => setActiveTab('inbox')}
@@ -832,7 +1195,7 @@ export default function App() {
 
         {/* Row 2 — wallet identity */}
         {address ? (
-          <div className="flex items-center gap-3 px-4 pb-3 pt-1">
+          <div className="flex items-center gap-2 px-3 sm:px-4 pb-2 pt-1">
             {/* Avatar */}
             <div
               className="flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ring-2 ring-white"
@@ -856,14 +1219,14 @@ export default function App() {
             </span>
           </div>
         ) : (
-          <div className="px-4 pb-3 pt-1">
+          <div className="px-3 sm:px-4 pb-2 pt-1">
             <p className="text-xs text-slate-400">Connect your wallet to get started</p>
           </div>
         )}
       </header>
 
       {/* ── Page content ─────────────────────────────────────────── */}
-      <main className="relative mx-auto max-w-md pt-3">
+      <main className="relative pb-32 pt-3" style={{ paddingLeft: 'env(safe-area-inset-left,0px)', paddingRight: 'env(safe-area-inset-right,0px)' }}>
         {activeTab === 'home' && (
           <HomeScreen
             txHistory={txHistory}
@@ -876,12 +1239,16 @@ export default function App() {
             onSavings={() => setSavingsOpen(true)}
             onLedger={() => setLedgerOpen(true)}
             onSwap={() => setSwapOpen(true)}
+            onQRPay={() => setQrPayOpen(true)}
+            onSupport={() => setSupportOpen(true)}
+            onOusd={() => setOusdOpen(true)}
+            onOusdInfo={() => setOusdInfoOpen(true)}
             onTxClick={setReceiptTx}
           />
         )}
         {activeTab === 'inbox' && <InboxTab txHistory={txHistory} onTxClick={setReceiptTx} />}
         {activeTab === 'transactions' && <TransactionsTab txHistory={txHistory} chainId={targetChainId} onLedger={() => setLedgerOpen(true)} onTxClick={setReceiptTx} />}
-        {activeTab === 'profile' && <ProfileTab onAdmin={() => setAdminOpen(true)} onTerms={() => setTermsOpen(true)} onPrivacy={() => setPrivacyOpen(true)} />}
+        {activeTab === 'profile' && <ProfileTab onAdmin={() => setAdminOpen(true)} onTerms={() => setTermsOpen(true)} onPrivacy={() => setPrivacyOpen(true)} onOpenPay={() => setOpenPayOpen(true)} openPayConnected={!!openPayAccount} onSupport={() => setSupportOpen(true)} onOusdInfo={() => setOusdInfoOpen(true)} onOusd={() => setOusdOpen(true)} />}
       </main>
 
       {/* ── Bottom nav ───────────────────────────────────────────── */}
@@ -894,6 +1261,7 @@ export default function App() {
 
       {/* ── Sheets ──────────────────────────────────────────────── */}
       <SendSheet
+        key={sendPrefill ?? 'send'}
         open={sendOpen}
         onClose={handleSendClose}
         prefillTo={sendPrefill}
@@ -916,6 +1284,9 @@ export default function App() {
       <AdminPanel open={adminOpen} onClose={() => setAdminOpen(false)} />
       <LedgerSheet open={ledgerOpen} onClose={() => setLedgerOpen(false)} />
       <SwapSheet open={swapOpen} onClose={() => setSwapOpen(false)} />
+      <QRPaySheet open={qrPayOpen} onClose={() => setQrPayOpen(false)} />
+      <OUSDSwapSheet open={ousdOpen} onClose={() => setOusdOpen(false)} />
+      <OUSDInfoSheet open={ousdInfoOpen} onClose={() => setOusdInfoOpen(false)} onSwap={() => { setOusdInfoOpen(false); setTimeout(() => setOusdOpen(true), 220) }} />
       <SavingsSheet
         open={savingsOpen}
         onClose={() => setSavingsOpen(false)}
@@ -928,6 +1299,8 @@ export default function App() {
       {/* Legal */}
       <TermsModal open={termsOpen} onClose={() => setTermsOpen(false)} />
       <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+      <OpenPayConnect open={openPayOpen} onClose={() => setOpenPayOpen(false)} />
+      <SupportSheet open={supportOpen} onClose={() => setSupportOpen(false)} />
 
       {/* Mainnet switch confirmation modal */}
       <AnimatePresence>

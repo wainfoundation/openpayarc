@@ -15,6 +15,9 @@ OpenPay Arc — a USDC wallet app on Arc Testnet with send, receive, bridge, QR 
 | Contract | Chain | Address | Explorer |
 |---|---|---|---|
 | OpenPaySavings | Arc Testnet | 0x8da10c3181669f4895b7aeaa59bcca4f1ef2a523 | https://explorer.testnet.arc.io/address/0x8da10c3181669f4895b7aeaa59bcca4f1ef2a523 |
+| OpenPayCheckout | Arc Testnet | 0x4cf994d842d5a49f683f41f452cbfe7bece31007 | https://explorer.testnet.arc.io/address/0x4cf994d842d5a49f683f41f452cbfe7bece31007 |
+| OpenPayOUSD (token) | Arc Testnet | 0x532cc3025e4ad11610966066fe2ed7c4d36a1eb1 | https://explorer.testnet.arc.io/address/0x532cc3025e4ad11610966066fe2ed7c4d36a1eb1 |
+| OpenPayOUSDSwap | Arc Testnet | 0x51fb1d4ca43eda173457f6c279de284a63040d13 | https://explorer.testnet.arc.io/address/0x51fb1d4ca43eda173457f6c279de284a63040d13 |
 
 ## Tech Stack
 

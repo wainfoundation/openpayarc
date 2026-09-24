@@ -1,12 +1,13 @@
 /**
  * AddFundsModal — "How do you want to fund your wallet?" picker.
- * White / light mode to match the rest of the iOS-style UI.
+ * Three options: Transfer Crypto (Bridge), Buy using Fiat (PayPal), Arc Onramp (Circle).
  */
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, ArrowLeftRight, CreditCard } from 'lucide-react'
+import { X, ArrowLeftRight, CreditCard, Zap } from 'lucide-react'
 import { TokenUSDC } from '@web3icons/react'
 import BuyFiatSheet from '@/components/BuyFiatSheet'
+import OnrampSheet from '@/components/OnrampSheet'
 
 const springs = { modal: { type: 'spring' as const, damping: 30, stiffness: 280 } }
 
@@ -29,6 +30,7 @@ interface Props {
 
 export default function AddFundsModal({ open, onClose, onBridge }: Props) {
   const [fiatOpen, setFiatOpen] = useState(false)
+  const [onrampOpen, setOnrampOpen] = useState(false)
 
   const handleBridge = () => {
     onClose()
@@ -38,6 +40,11 @@ export default function AddFundsModal({ open, onClose, onBridge }: Props) {
   const handleFiat = () => {
     onClose()
     setTimeout(() => setFiatOpen(true), 180)
+  }
+
+  const handleOnramp = () => {
+    onClose()
+    setTimeout(() => setOnrampOpen(true), 180)
   }
 
   return (
@@ -85,18 +92,15 @@ export default function AddFundsModal({ open, onClose, onBridge }: Props) {
               </p>
             </div>
 
-            {/* Options */}
-            <div className="grid grid-cols-2 gap-3 px-5 pb-3 pt-5">
+            {/* Top row — 2 cols */}
+            <div className="grid grid-cols-2 gap-3 px-5 pt-5">
               {/* Transfer Crypto */}
               <button
                 onClick={handleBridge}
                 className="group flex flex-col rounded-2xl p-4 text-left transition-all hover:shadow-md active:scale-[0.97]"
                 style={{ background: '#f8faff', border: '1px solid #dbeafe' }}
               >
-                <div
-                  className="mb-3 flex size-10 items-center justify-center rounded-xl"
-                  style={{ background: '#dbeafe' }}
-                >
+                <div className="mb-3 flex size-10 items-center justify-center rounded-xl" style={{ background: '#dbeafe' }}>
                   <ArrowLeftRight className="size-5 text-blue-600" />
                 </div>
                 <p className="text-sm font-bold" style={{ color: 'var(--ink)' }}>Transfer your Crypto</p>
@@ -111,16 +115,13 @@ export default function AddFundsModal({ open, onClose, onBridge }: Props) {
                 </div>
               </button>
 
-              {/* Buy with Fiat */}
+              {/* Buy with Fiat (PayPal) */}
               <button
                 onClick={handleFiat}
                 className="group flex flex-col rounded-2xl p-4 text-left transition-all hover:shadow-md active:scale-[0.97]"
                 style={{ background: '#f8faff', border: '1px solid #dbeafe' }}
               >
-                <div
-                  className="mb-3 flex size-10 items-center justify-center rounded-xl"
-                  style={{ background: '#dbeafe' }}
-                >
+                <div className="mb-3 flex size-10 items-center justify-center rounded-xl" style={{ background: '#dbeafe' }}>
                   <CreditCard className="size-5 text-blue-600" />
                 </div>
                 <p className="text-sm font-bold" style={{ color: 'var(--ink)' }}>Buy using Fiat</p>
@@ -132,21 +133,38 @@ export default function AddFundsModal({ open, onClose, onBridge }: Props) {
                     <span className="text-[9px] font-black" style={{ color: '#EB001B' }}>M</span>
                     <span className="text-[9px] font-black" style={{ color: '#F79E1B' }}>C</span>
                   </span>
-                  <span className="flex h-6 w-9 items-center justify-center rounded bg-white text-[9px] font-extrabold shadow-sm" style={{ border: '1px solid #e2e8f0', color: '#1A1F71' }}>
-                    VISA
-                  </span>
-                  <span className="flex h-6 w-9 items-center justify-center rounded bg-white text-[8px] font-bold shadow-sm" style={{ border: '1px solid #e2e8f0', color: '#1d2f50' }}>
-                    ⊕Pay
-                  </span>
-                  <span className="flex h-6 w-9 items-center justify-center rounded bg-white text-[8px] font-bold shadow-sm" style={{ border: '1px solid #e2e8f0', color: '#4285F4' }}>
-                    GPay
-                  </span>
+                  <span className="flex h-6 w-9 items-center justify-center rounded bg-white text-[9px] font-extrabold shadow-sm" style={{ border: '1px solid #e2e8f0', color: '#1A1F71' }}>VISA</span>
+                  <span className="flex h-6 w-9 items-center justify-center rounded bg-white text-[8px] font-bold shadow-sm" style={{ border: '1px solid #e2e8f0', color: '#1d2f50' }}>⊕Pay</span>
+                  <span className="flex h-6 w-9 items-center justify-center rounded bg-white text-[8px] font-bold shadow-sm" style={{ border: '1px solid #e2e8f0', color: '#4285F4' }}>GPay</span>
                 </div>
               </button>
             </div>
 
+            {/* Full-width row — Arc Onramp */}
+            <div className="px-5 pt-3">
+              <button
+                onClick={handleOnramp}
+                className="group flex w-full items-center gap-4 rounded-2xl p-4 text-left transition-all hover:shadow-md active:scale-[0.99]"
+                style={{ background: 'linear-gradient(135deg,#eef4ff,#f5f0ff)', border: '1px solid #c7d8ff' }}
+              >
+                <div className="flex size-12 shrink-0 items-center justify-center rounded-xl" style={{ background: 'linear-gradient(135deg,#3b82f6,#8b5cf6)' }}>
+                  <Zap className="size-6 text-white" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold" style={{ color: 'var(--ink)' }}>Arc Onramp</p>
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-bold text-blue-600" style={{ background: '#dbeafe' }}>Circle KYC</span>
+                  </div>
+                  <p className="text-xs leading-relaxed text-slate-500 mt-0.5">
+                    Buy USDC or EURC with debit card, Apple Pay, Google Pay, or bank transfer — hosted by Circle.
+                  </p>
+                </div>
+                <div className="shrink-0 text-xs font-semibold text-blue-600">Open →</div>
+              </button>
+            </div>
+
             {/* Footer */}
-            <div className="flex flex-col items-center gap-3 pb-6 pt-2">
+            <div className="flex flex-col items-center gap-3 pb-6 pt-4">
               <div className="flex items-center gap-1.5">
                 <TokenUSDC variant="branded" size={18} />
                 <span className="text-xs font-semibold text-slate-400">Powered by Circle · USDC</span>
@@ -162,10 +180,16 @@ export default function AddFundsModal({ open, onClose, onBridge }: Props) {
         </motion.div>
       )}
     </AnimatePresence>
+
     <BuyFiatSheet
       open={fiatOpen}
       onClose={() => setFiatOpen(false)}
       onBack={() => { setFiatOpen(false); onClose() }}
+    />
+    <OnrampSheet
+      open={onrampOpen}
+      onClose={() => setOnrampOpen(false)}
+      onBack={() => { setOnrampOpen(false); onClose() }}
     />
     </>
   )

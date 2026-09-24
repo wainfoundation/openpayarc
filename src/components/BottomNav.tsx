@@ -37,13 +37,15 @@ export default function BottomNav({ active, onTab, onQR, inboxCount = 0 }: Props
 
   return (
     <nav
-      className="fixed bottom-0 inset-x-0 z-40 mx-auto flex max-w-md items-end"
+      className="fixed bottom-0 left-1/2 z-40 flex w-full max-w-[480px] -translate-x-1/2 items-end"
       style={{
-        background: 'rgba(255,255,255,0.96)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
+        background: 'rgba(255,255,255,0.97)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
         borderTop: '1px solid rgba(0,0,0,0.08)',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 10px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)',
+        paddingRight: 'env(safe-area-inset-right, 0px)',
       }}
     >
       {item('home', <Home className="size-5" />, 'Home')}

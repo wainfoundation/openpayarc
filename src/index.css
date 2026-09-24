@@ -36,15 +36,147 @@ div[class*="ConnectKit"], div[class*="ConnectKit"] * {
   --card-radius: 20px;
 }
 
-* {
+/* ── Dark mode variables ───────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg: #0a0f1e;
+  --bg-gradient: linear-gradient(180deg, #0d1424 0%, #0a0f1e 100%);
+  --surface: #131929;
+  --surface-strong: #1a2235;
+  --surface-muted: #1e2840;
+  --ink: #f1f5f9;
+  --ink-2: #e2e8f0;
+  --muted: #94a3b8;
+  --subtle: #64748b;
+  --border: rgba(241, 245, 249, 0.08);
+  --border-strong: rgba(241, 245, 249, 0.18);
+  --accent: #93c5fd;
+  --accent-blue: #3b82f6;
+  --accent-hover: #60a5fa;
+  --focus: #1d4ed8;
+  --success: #22c55e;
+  --danger: #ef4444;
+}
+
+[data-theme="dark"] body,
+[data-theme="dark"] #root {
+  background: #07090f;
+}
+
+[data-theme="dark"] .app-shell {
+  background: var(--bg);
+}
+
+@media (min-width: 481px) {
+  [data-theme="dark"] #root {
+    background: #050710;
+  }
+}
+
+/* Dark mode: ConnectKit overrides */
+[data-theme="dark"] [data-rk],
+[data-theme="dark"] [data-rk] *,
+[data-theme="dark"] .ck-modal,
+[data-theme="dark"] .ck-modal *,
+[data-theme="dark"] div[class*="ConnectKit"],
+[data-theme="dark"] div[class*="ConnectKit"] * {
+  --ck-body-background: #131929 !important;
+  --ck-body-background-secondary: #1a2235 !important;
+  --ck-body-background-tertiary: #1e2840 !important;
+  --ck-dropdown-background: #131929 !important;
+  --ck-network-selector-background: #131929 !important;
+  --ck-body-color: #f1f5f9 !important;
+  --ck-body-color-muted: #94a3b8 !important;
+}
+
+/* ── Mobile normalization ──────────────────────────────────────────────── */
+*, *::before, *::after {
   box-sizing: border-box;
+  /* Remove iOS tap flash */
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  /* Prevent iOS font inflation */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Smooth scroll */
+  scroll-behavior: smooth;
+  /* Force full viewport height */
+  height: 100%;
 }
 
 body {
   margin: 0;
+  padding: 0;
   font-family: 'DM Sans', sans-serif;
+  min-height: 100%;
   min-height: 100dvh;
+  /* Prevent overscroll bounce on iOS */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  /* Desktop: tinted background so the phone column looks intentional */
+  background: #e8edf5;
+  /* Prevent text selection on touch */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Re-enable text selection on inputs and text areas */
+input, textarea, [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Prevent horizontal scroll on all devices */
+body, #root {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* ── App shell — phone column centered on desktop ──────────────────────── */
+#root {
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  background: #e8edf5;
+}
+
+/* Phone column: full-width on mobile, max 480px centered on desktop */
+.app-shell {
+  width: 100%;
+  max-width: 480px;
+  min-height: 100dvh;
+  background: var(--bg);
+  position: relative;
+  /* Only show shadow on tablet/desktop — on phone it fills the full screen */
+  overflow-x: hidden;
+}
+
+/* Desktop shadow only */
+@media (min-width: 481px) {
+  .app-shell {
+    box-shadow: 0 0 80px rgba(0, 0, 0, 0.15);
+  }
+
+  #root {
+    background: #dde3ef;
+  }
+}
+
+/* iOS safe area padding helpers */
+.safe-top    { padding-top:    env(safe-area-inset-top, 0px); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+.safe-left   { padding-left:   env(safe-area-inset-left, 0px); }
+.safe-right  { padding-right:  env(safe-area-inset-right, 0px); }
+
+/* Smooth scrollable areas */
+.scroll-area {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 .display { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.03em; }
 .mono { font-family: 'JetBrains Mono', Menlo, monospace; }
+
+

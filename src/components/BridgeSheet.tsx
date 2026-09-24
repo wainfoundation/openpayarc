@@ -16,6 +16,7 @@ import { AppKit, BridgeChain } from '@circle-fin/app-kit'
 import type { BridgeResult } from '@circle-fin/app-kit'
 import { createViemAdapterFromProvider } from '@circle-fin/adapter-viem-v2'
 import { useNetwork } from '@/NetworkContext'
+import { useNetworkFee } from '@/hooks/useNetworkFee'
 
 const springs = { sheet: { type: 'spring', damping: 32, stiffness: 300 } }
 const appKit = new AppKit()
@@ -76,6 +77,7 @@ interface Props {
 
 export default function BridgeSheet({ open, onClose }: Props) {
   const { chainName, isTestnet } = useNetwork()
+  const { feeUSDC, isLoading: feeLoading } = useNetworkFee()
   const { address, connector, isConnected } = useAccount()
   const { switchChainAsync } = useSwitchChain()
 
@@ -372,9 +374,10 @@ export default function BridgeSheet({ open, onClose }: Props) {
                       : `Bridge $${amount} USDC to Arc`}
                   </button>
 
-                  <p className="text-center text-xs text-slate-400">
-                    Powered by Circle CCTP · Fast mode (~20s)
-                  </p>
+                  <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+                    <span>Network fee: <span className="font-medium text-slate-500">{feeLoading ? 'Estimating…' : (feeUSDC ?? '~$0.00 USDC')}</span></span>
+                    <span>Powered by CCTP · ~20s</span>
+                  </div>
                 </div>
               )}
             </div>
