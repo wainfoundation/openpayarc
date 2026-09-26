@@ -16,8 +16,9 @@ OpenPay Arc — a USDC wallet app on Arc Testnet with send, receive, bridge, QR 
 |---|---|---|---|
 | OpenPaySavings | Arc Testnet | 0x8da10c3181669f4895b7aeaa59bcca4f1ef2a523 | https://explorer.testnet.arc.io/address/0x8da10c3181669f4895b7aeaa59bcca4f1ef2a523 |
 | OpenPayCheckout | Arc Testnet | 0x4cf994d842d5a49f683f41f452cbfe7bece31007 | https://explorer.testnet.arc.io/address/0x4cf994d842d5a49f683f41f452cbfe7bece31007 |
-| OpenPayOUSD (token) | Arc Testnet | 0x532cc3025e4ad11610966066fe2ed7c4d36a1eb1 | https://explorer.testnet.arc.io/address/0x532cc3025e4ad11610966066fe2ed7c4d36a1eb1 |
-| OpenPayOUSDSwap | Arc Testnet | 0x51fb1d4ca43eda173457f6c279de284a63040d13 | https://explorer.testnet.arc.io/address/0x51fb1d4ca43eda173457f6c279de284a63040d13 |
+| OpenPayOUSD (token) | Arc Testnet | 0xdd9cb6cbe39f5caf475241124e749875d7e7b355 | https://explorer.testnet.arc.io/address/0xdd9cb6cbe39f5caf475241124e749875d7e7b355 |
+| OpenPayOUSDSwap | Arc Testnet | 0x5fa7eea107a26102c676b9db6eca311849cefdfd | https://explorer.testnet.arc.io/address/0x5fa7eea107a26102c676b9db6eca311849cefdfd |
+| NOTE: Owner (0x13c4E6e84Ac8F0443682eC9B42816EeAA2fc13B9) must call setSwapContract(0x5fa7eea107a26102c676b9db6eca311849cefdfd) on the OUSD token | - | - | - |
 
 ## Tech Stack
 

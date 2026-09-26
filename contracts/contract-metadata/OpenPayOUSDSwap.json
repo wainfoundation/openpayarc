@@ -1,13 +1,20 @@
 {
-  "contractAddress": "0x51fb1d4ca43eda173457f6c279de284a63040d13",
+  "contractAddress": "0x5fa7eea107a26102c676b9db6eca311849cefdfd",
   "network": "ARC-TESTNET",
   "deployerWalletId": "3c2464b2-8369-52e2-a782-800bbeca5396",
   "contract_code_path": "/home/user/app/contracts/OpenPayOUSDSwap.sol",
   "contract_compiled_code_path": "/home/user/app/contracts/out/OpenPayOUSDSwap.sol/OpenPayOUSDSwap.json",
   "contract_network_and_links": {
-    "Arc Testnet": "https://explorer.testnet.arc.io/address/0x51fb1d4ca43eda173457f6c279de284a63040d13"
+    "Arc Testnet": "https://explorer.testnet.arc.io/address/0x5fa7eea107a26102c676b9db6eca311849cefdfd"
   },
   "contract_deployments": [
+    {
+      "chain": "Arc Testnet",
+      "address": "0x5fa7eea107a26102c676b9db6eca311849cefdfd",
+      "explorerUrl": "https://explorer.testnet.arc.io/address/0x5fa7eea107a26102c676b9db6eca311849cefdfd",
+      "txHash": "0x823becc9bf3549df08f60aa06086eef25801b0ef7a9761e7b1974f283bb2f296",
+      "deployedAt": "2026-09-26T23:24:22.769Z"
+    },
     {
       "chain": "Arc Testnet",
       "address": "0x51fb1d4ca43eda173457f6c279de284a63040d13",

@@ -39,25 +39,18 @@ const DEFAULT_METHODS: PaymentMethodsConfig = {
 // ─── Feature flags (admin-controlled, persisted) ─────────────────────────────
 
 export type FeatureFlagKey =
-  | 'send'
-  | 'receive'
-  | 'transfer'
-  | 'swap'
-  | 'bridge'
-  | 'savings'
-  | 'payLinks'
-  | 'ledger'
-  | 'buyFiat'
-  | 'connectedAccounts'
-  | 'support'
-  | 'inbox'
-  | 'transactions'
-  | 'scanner'
+  | 'send' | 'receive' | 'transfer' | 'swap' | 'bridge' | 'savings'
+  | 'payLinks' | 'ledger' | 'buyFiat' | 'connectedAccounts' | 'support'
+  | 'inbox' | 'transactions' | 'scanner'
+  | 'eurc' | 'usyc' | 'stableFX' | 'chainlink' | 'pyth'
+  | 'agentEconomy' | 'batchSend' | 'unifiedBalance'
 
 export const ALL_FEATURES: FeatureFlagKey[] = [
   'send', 'receive', 'transfer', 'swap', 'bridge', 'savings',
   'payLinks', 'ledger', 'buyFiat', 'connectedAccounts', 'support',
   'inbox', 'transactions', 'scanner',
+  'eurc', 'usyc', 'stableFX', 'chainlink', 'pyth',
+  'agentEconomy', 'batchSend', 'unifiedBalance',
 ]
 
 export const FEATURE_LABELS: Record<FeatureFlagKey, { label: string; sub: string }> = {
@@ -75,6 +68,14 @@ export const FEATURE_LABELS: Record<FeatureFlagKey, { label: string; sub: string
   inbox:             { label: 'Inbox tab',           sub: 'Notification inbox' },
   transactions:      { label: 'Transactions tab',    sub: 'Full tx history tab' },
   scanner:           { label: 'QR Scanner',          sub: 'Camera QR code scanner' },
+  eurc:              { label: 'EURC (Euro)',          sub: 'Euro stablecoin — send, receive, balance' },
+  usyc:              { label: 'USYC (Yield)',         sub: 'Tokenized T-Bill yield on Arc' },
+  stableFX:          { label: 'StableFX',            sub: 'USDC ↔ EURC on-chain FX swap' },
+  chainlink:         { label: 'Chainlink Prices',    sub: 'Live price feeds on Arc Mainnet' },
+  pyth:              { label: 'Pyth Oracle',         sub: 'Pull-model BTC/USD on Arc Testnet' },
+  agentEconomy:      { label: 'Agent Economy',       sub: 'ERC-8004 identity + ERC-8183 jobs' },
+  batchSend:         { label: 'Batch Send',          sub: 'Send USDC to multiple addresses' },
+  unifiedBalance:    { label: 'Unified Balance',     sub: 'Combined USDC across all chains' },
 }
 
 export type FeatureFlagsConfig = Record<FeatureFlagKey, boolean>
@@ -83,6 +84,8 @@ const DEFAULT_FEATURES: FeatureFlagsConfig = {
   send: true, receive: true, transfer: true, swap: true, bridge: true,
   savings: true, payLinks: true, ledger: true, buyFiat: true,
   connectedAccounts: true, support: true, inbox: true, transactions: true, scanner: true,
+  eurc: true, usyc: true, stableFX: true, chainlink: true, pyth: true,
+  agentEconomy: true, batchSend: true, unifiedBalance: true,
 }
 
 export interface NetworkContextValue {

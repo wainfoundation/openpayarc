@@ -24,7 +24,7 @@ const spectral = 'linear-gradient(90deg, #5fbeff, #af8ff4, #f05c6b, #ffcd83, #7e
 const OUSD_ADDRESSES: Record<number, { token: string; swap: string; explorer: string }> = {
   5042002: {
     token:    '0xdd9cb6cbe39f5caf475241124e749875d7e7b355',
-    swap:     '0x51fb1d4ca43eda173457f6c279de284a63040d13',
+    swap:     '0x5fa7eea107a26102c676b9db6eca311849cefdfd',
     explorer: 'https://explorer.testnet.arc.io',
   },
   5042: {

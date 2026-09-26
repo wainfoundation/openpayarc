@@ -12,7 +12,12 @@ import { useNetwork } from '@/NetworkContext'
 import { useNetworkFee } from '@/hooks/useNetworkFee'
 import { FEE_WALLET, calcPlatformFee, formatFee } from '@/hooks/usePlatformFee'
 
-const OUSD_ADDRESS = '0x532cc3025e4ad11610966066fe2ed7c4d36a1eb1' as `0x${string}`
+// OUSD token addresses per chain
+const OUSD_ADDRESSES: Record<number, `0x${string}`> = {
+  5042002: '0xdd9cb6cbe39f5caf475241124e749875d7e7b355', // Arc Testnet (latest)
+  // 5042: '0x...' // Arc Mainnet — add when deployed
+}
+const OUSD_ADDRESS = '0xdd9cb6cbe39f5caf475241124e749875d7e7b355' as `0x${string}` // fallback
 
 const spectral = 'linear-gradient(90deg, #5fbeff, #af8ff4, #f05c6b, #ffcd83, #7ef1b3)'
 const springs = { sheet: { type: 'spring', damping: 32, stiffness: 300 } }

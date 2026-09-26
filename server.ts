@@ -14,6 +14,7 @@
  */
 
 import { initiateUserControlledWalletsClient, Blockchain } from '@circle-fin/user-controlled-wallets'
+import { createAppServerKit, createSessionRouteHandler } from '@circle-fin/app-kit/server'
 
 const PORT = 3001
 
@@ -25,8 +26,25 @@ const OP_REDIRECT_URI  = process.env.OPENPAY_REDIRECT_URI ?? 'https://openpayarc
 const OP_BASE          = 'https://openpy.space'
 
 const apiKey        = process.env.CIRCLE_API_KEY ?? ''
-const KIT_KEY       = process.env.ONRAMP_KIT_KEY ?? ''
-const ONRAMP_API    = 'https://api.circle.com/v1/w3s/onramp'
+// Onramp uses the Circle API key (same key, not a separate KIT_KEY)
+// ONRAMP_KIT_KEY is kept as a fallback alias for backward compatibility
+// Onramp API key: prefer ONRAMP_KIT_KEY (App Kit key) over CIRCLE_API_KEY (dev wallets key)
+const ONRAMP_API_KEY = process.env.ONRAMP_KIT_KEY ?? process.env.CIRCLE_API_KEY ?? ''
+
+
+// App Kit server — onramp sessions via createAppServerKit
+// Uses CIRCLE_API_KEY (standard Circle API key from console.circle.com/api-keys)
+// Falls back to ONRAMP_KIT_KEY if CIRCLE_API_KEY not set
+const onrampApiKey  = ONRAMP_API_KEY
+const appServer     = onrampApiKey
+  ? createAppServerKit({
+      onramp: {
+        apiKey: onrampApiKey,
+        referrerDomain: 'openpayarc.netlify.app',
+      },
+    })
+  : null
+const sessionHandler = appServer ? createSessionRouteHandler(appServer.onramp) : null
 const PAYPAL_ID     = process.env.PAYPAL_CLIENT_ID ?? ''
 const PAYPAL_SECRET = process.env.PAYPAL_CLIENT_SECRET ?? ''
 const PAYPAL_BASE   = process.env.PAYPAL_ENV === 'production'
@@ -135,31 +153,21 @@ async function handle(req: Request): Promise<Response> {
   }
 
   // ── POST /onramp/sessions ────────────────────────────────────────────────
-  // Mints a short-lived Arc Onramp session. Kit Key stays server-side only.
+  // Mints a short-lived Arc Onramp session using @circle-fin/app-kit/server.
+  // CIRCLE_API_KEY (or ONRAMP_KIT_KEY as fallback) stays server-side only.
   if (req.method === 'POST' && url.pathname === '/onramp/sessions') {
-    if (!KIT_KEY) {
-      return json({ error: { name: 'server_misconfigured', message: 'ONRAMP_KIT_KEY not set in .env — add your Circle Kit Key to enable Arc Onramp.' } }, 503)
+    if (!sessionHandler) {
+      return json({ error: { name: 'server_misconfigured', message: 'CIRCLE_API_KEY not set in .env — add your Circle API key from console.circle.com/api-keys to enable Arc Onramp.' } }, 503)
     }
-    const body = getBody<{ userId?: string; destinationAddress?: string; amount?: string; currency?: string; email?: string }>()
-    if (!body.destinationAddress) return err('destinationAddress required')
     try {
-      const res = await fetch(`${ONRAMP_API}/sessions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${KIT_KEY}`,
-          'Content-Type': 'application/json',
-          'X-Request-Id': crypto.randomUUID(),
-        },
-        body: JSON.stringify({
-          userId: body.userId ?? crypto.randomUUID(),
-          destinationAddress: body.destinationAddress,
-          ...(body.amount   ? { amount: body.amount }     : {}),
-          ...(body.currency ? { currency: body.currency } : {}),
-          ...(body.email    ? { email: body.email }       : {}),
-        }),
+      // Body was already consumed by req.text() above — reconstruct a fresh Request
+      // so the SDK can read it. Mirror all original headers.
+      const freshReq = new Request(req.url, {
+        method: req.method,
+        headers: req.headers,
+        body: rawBody,
       })
-      const data = await res.json()
-      return json(data, res.status)
+      return await sessionHandler(freshReq)
     } catch (e) { return err(String(e), 500) }
   }
 

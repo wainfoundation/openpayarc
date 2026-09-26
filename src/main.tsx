@@ -13,11 +13,12 @@
 import './tracing'
 import './console-capture'
 
-import { StrictMode } from 'react'
+import { StrictMode, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ConnectKitProvider } from 'connectkit'
+import { ConnectKitProvider, useModal } from 'connectkit'
+import { useAccount } from 'wagmi'
 import { Toaster } from 'sonner'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { config } from './config'
@@ -26,6 +27,16 @@ import CheckoutPage from './components/CheckoutPage'
 import { NetworkProvider } from './NetworkContext'
 
 import './index.css'
+
+/** Closes the ConnectKit modal as soon as a wallet connects. */
+function AutoCloseOnConnect() {
+  const { isConnected } = useAccount()
+  const { setOpen } = useModal()
+  useEffect(() => {
+    if (isConnected) setOpen(false)
+  }, [isConnected, setOpen])
+  return null
+}
 
 // Apply persisted theme before first render to avoid flash
 ;(function () {
@@ -101,6 +112,7 @@ createRoot(document.getElementById('root')!).render(
               "--ck-connectbutton-balance-color": "#ffffff",
             }}
             >
+              <AutoCloseOnConnect />
               <Routes>
                 <Route path="/pay/:requestId" element={<CheckoutPage />} />
                 <Route path="*" element={<App />} />

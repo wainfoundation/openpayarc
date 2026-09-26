@@ -21,7 +21,7 @@ const OUSD_ADDRESSES: Record<number, { token: `0x${string}`; swap: `0x${string}`
   // Arc Testnet (5042002)
   5042002: {
     token:    '0xdd9cb6cbe39f5caf475241124e749875d7e7b355',
-    swap:     '0x51fb1d4ca43eda173457f6c279de284a63040d13',
+    swap:     '0x5fa7eea107a26102c676b9db6eca311849cefdfd',
     explorer: 'https://explorer.testnet.arc.io',
   },
   // Arc Mainnet (5042) — replace with real addresses after deploying from your wallet

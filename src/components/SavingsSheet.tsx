@@ -24,7 +24,12 @@ import { FEE_WALLET, calcPlatformFee, formatFee } from '@/hooks/usePlatformFee'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** Arc Testnet — the only chain the savings contract is deployed on */
+/** Savings contract addresses per chain (add mainnet when deployed) */
+const SAVINGS_ADDRESSES: Record<number, `0x${string}`> = {
+  5042002: '0x8da10c3181669f4895b7aeaa59bcca4f1ef2a523', // Arc Testnet
+  // 5042: '0x...' // Arc Mainnet — add when deployed
+}
+/** The chain the savings contract is currently deployed on (for chain-switch UX) */
 const SAVINGS_CHAIN_ID = 5042002
 const USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as `0x${string}`
 const USDC_DECIMALS = 6
@@ -295,7 +300,8 @@ function ActionPanel({
     onSuccess()
   }
 
-  const explorerUrl = lastHash ? buildTxExplorerUrl(SAVINGS_CHAIN_ID, lastHash) : null
+  const activeChainId = useChainId()
+  const explorerUrl = lastHash ? buildTxExplorerUrl(SAVINGS_ADDRESSES[activeChainId] ? activeChainId : SAVINGS_CHAIN_ID, lastHash) : null
 
   // Deposit step label
   const depositStepLabel = () => {
@@ -502,10 +508,10 @@ function ActionPanel({
 interface Props {
   open: boolean
   onClose: () => void
-  savingsAddress: `0x${string}` | null
+  savingsAddress?: `0x${string}` | null // kept for backwards compat, ignored — address derived from chain
 }
 
-export default function SavingsSheet({ open, onClose, savingsAddress }: Props) {
+export default function SavingsSheet({ open, onClose }: Props) {
   const { address } = useAccount()
   const walletChainId = useChainId()
   const { switchChain, isPending: switching } = useSwitchChain()
@@ -514,33 +520,36 @@ export default function SavingsSheet({ open, onClose, savingsAddress }: Props) {
   const [_refreshKey, setRefreshKey]    = useState(0)
   const nowSec = useNowSec()
 
+  // Derive savings address from wallet's current chain
+  const savingsAddress = address ? (SAVINGS_ADDRESSES[walletChainId] ?? null) : null
   const isDeployed   = Boolean(savingsAddress)
   const contractAddr = (savingsAddress ?? '0x0')
+  // Which chain(s) have savings deployed — for the switch button message
+  const deployedChainIds = Object.keys(SAVINGS_ADDRESSES).map(Number)
+  const nearestSavingsChain = deployedChainIds[0] ?? SAVINGS_CHAIN_ID
 
-  // Chain mismatch: wallet must be on Arc Testnet for savings
-  const isWrongChain = Boolean(address) && walletChainId !== SAVINGS_CHAIN_ID
+  // Chain mismatch: wallet must be on a chain where savings is deployed
+  const isWrongChain = Boolean(address) && !SAVINGS_ADDRESSES[walletChainId]
 
-  // Wallet USDC balance (always read from testnet)
+  // Wallet USDC balance (read from wallet's current chain)
   const { data: walletBalance } = useReadContract({
     address: USDC_ADDRESS,
     abi: erc20Abi,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
-    chainId: SAVINGS_CHAIN_ID,
     query: { enabled: Boolean(address) && isDeployed && !isWrongChain, refetchInterval: 10_000 },
   })
 
   // Total deposited
   const { data: totalDep } = useReadContract({
     address: contractAddr, abi: SAVINGS_ABI, functionName: 'totalDeposited',
-    chainId: SAVINGS_CHAIN_ID,
     query: { enabled: isDeployed, refetchInterval: 15_000 },
   })
 
   // Positions for all three plans
-  const pos0 = useReadContract({ address: contractAddr, abi: SAVINGS_ABI, functionName: 'getPosition', args: address ? [address, 0] : undefined, chainId: SAVINGS_CHAIN_ID, query: { enabled: Boolean(address) && isDeployed, refetchInterval: 12_000 } })
-  const pos1 = useReadContract({ address: contractAddr, abi: SAVINGS_ABI, functionName: 'getPosition', args: address ? [address, 1] : undefined, chainId: SAVINGS_CHAIN_ID, query: { enabled: Boolean(address) && isDeployed, refetchInterval: 12_000 } })
-  const pos2 = useReadContract({ address: contractAddr, abi: SAVINGS_ABI, functionName: 'getPosition', args: address ? [address, 2] : undefined, chainId: SAVINGS_CHAIN_ID, query: { enabled: Boolean(address) && isDeployed, refetchInterval: 12_000 } })
+  const pos0 = useReadContract({ address: contractAddr, abi: SAVINGS_ABI, functionName: 'getPosition', args: address ? [address, 0] : undefined, query: { enabled: Boolean(address) && isDeployed, refetchInterval: 12_000 } })
+  const pos1 = useReadContract({ address: contractAddr, abi: SAVINGS_ABI, functionName: 'getPosition', args: address ? [address, 1] : undefined, query: { enabled: Boolean(address) && isDeployed, refetchInterval: 12_000 } })
+  const pos2 = useReadContract({ address: contractAddr, abi: SAVINGS_ABI, functionName: 'getPosition', args: address ? [address, 2] : undefined, query: { enabled: Boolean(address) && isDeployed, refetchInterval: 12_000 } })
   const posQueries = [pos0, pos1, pos2]
 
   const refresh = useCallback(() => {
@@ -611,18 +620,22 @@ export default function SavingsSheet({ open, onClose, savingsAddress }: Props) {
                 /* ── Wrong chain banner ── */
                 <div className="rounded-2xl bg-amber-50 p-5 text-center" style={{ border: '1px solid #fde68a' }}>
                   <AlertCircle className="mx-auto size-8 text-amber-500" />
-                  <p className="mt-2 font-semibold text-amber-700">Switch to Arc Testnet</p>
+                  <p className="mt-2 font-semibold text-amber-700">
+                    Switch to {nearestSavingsChain === 5042002 ? 'Arc Testnet' : 'Arc Mainnet'}
+                  </p>
                   <p className="mt-1 text-xs text-amber-600">
-                    The Savings contract is deployed on Arc Testnet (chain 5042002).<br />
+                    The Savings contract is deployed on {nearestSavingsChain === 5042002 ? 'Arc Testnet' : 'Arc Mainnet'} (chain {nearestSavingsChain}).<br />
                     Your wallet is currently on chain {walletChainId}.
                   </p>
                   <button
-                    onClick={() => switchChain({ chainId: SAVINGS_CHAIN_ID })}
+                    onClick={() => switchChain({ chainId: nearestSavingsChain })}
                     disabled={switching}
                     className="mt-4 flex items-center justify-center gap-2 w-full rounded-2xl py-3 text-sm font-bold text-white disabled:opacity-60"
                     style={{ background: 'linear-gradient(135deg,#d97706,#b45309)' }}
                   >
-                    {switching ? <><Loader2 className="size-4 animate-spin" />Switching…</> : 'Switch to Arc Testnet'}
+                    {switching
+                      ? <><Loader2 className="size-4 animate-spin" />Switching…</>
+                      : `Switch to ${nearestSavingsChain === 5042002 ? 'Arc Testnet' : 'Arc Mainnet'}`}
                   </button>
                 </div>
               ) : (
