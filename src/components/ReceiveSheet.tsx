@@ -8,7 +8,23 @@ import { X, Copy, Check, Link, QrCode, Loader2, ChevronDown } from 'lucide-react
 import { useAccount } from 'wagmi'
 import { TokenUSDC } from '@web3icons/react'
 import OUSDIcon from './OUSDIcon'
+// TokenUSDC and OUSDIcon used inside TokenIcon below
 import { useQRCode } from '@/hooks/useQRCode'
+import { useNetwork } from '@/NetworkContext'
+import { getArcTokens, type ArcToken } from '@/arcTokens'
+
+/** Token icon for any Arc token */
+function TokenIcon({ token, size = 16 }: { token: ArcToken; size?: number }) {
+  if (token.symbol === 'USDC') return <TokenUSDC variant="branded" size={size} />
+  if (token.symbol === 'OUSD') return <OUSDIcon size={size} />
+  const initials: Record<string, string> = { EURC: '€', USYC: '⬡', cirBTC: '₿' }
+  return (
+    <div className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      style={{ width: size, height: size, background: token.color, fontSize: size * 0.45 }}>
+      {initials[token.symbol] ?? token.symbol[0]}
+    </div>
+  )
+}
 
 type ReceiveToken = 'USDC' | 'OUSD'
 
@@ -62,8 +78,20 @@ export default function ReceiveSheet({ open, onClose }: Props) {
   const [copiedAddr, setCopiedAddr] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
   const [qrView, setQrView] = useState<'address' | 'link'>('address')
-  const [receiveToken, setReceiveToken] = useState<ReceiveToken>('USDC')
+  const { features, chainId: targetChainId } = useNetwork()
+  const [selectedSymbol, setSelectedSymbol] = useState('USDC')
   const [tokenMenuOpen, setTokenMenuOpen] = useState(false)
+
+  const allTokens = getArcTokens(targetChainId)
+  const receivableTokens = allTokens.filter(t => {
+    if (!t.address) return false
+    if (t.featureKey && !(features as Record<string, boolean>)[t.featureKey]) return false
+    return true
+  })
+  const selectedToken = receivableTokens.find(t => t.symbol === selectedSymbol) ?? receivableTokens[0]
+  // Fall back to USDC if selected token feature disabled
+  if (selectedToken?.symbol !== selectedSymbol) setSelectedSymbol('USDC')
+  const receiveToken: ReceiveToken = (selectedSymbol === 'OUSD' ? 'OUSD' : 'USDC')
 
   const paymentLink = address
     ? (() => {
@@ -121,31 +149,21 @@ export default function ReceiveSheet({ open, onClose }: Props) {
                   <h2 className="text-lg font-bold" style={{ color: 'var(--ink)' }}>Receive</h2>
                   {/* Token selector */}
                   <div className="relative">
-                    <button
-                      onClick={() => setTokenMenuOpen(o => !o)}
+                    <button onClick={() => setTokenMenuOpen(o => !o)}
                       className="flex items-center gap-1.5 rounded-xl px-2.5 py-1 text-sm font-bold transition-colors hover:opacity-80"
-                      style={receiveToken === 'OUSD'
-                        ? { background: '#e8eeff', color: '#0D47D1', border: '1px solid #c0d0ff' }
-                        : { background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe' }}
-                    >
-                      {receiveToken === 'USDC'
-                        ? <TokenUSDC variant="branded" size={14} />
-                        : <OUSDIcon size={14} />
-                      }
-                      {receiveToken}
+                      style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe' }}>
+                      {selectedToken && <TokenIcon token={selectedToken} size={14} />}
+                      {selectedToken?.symbol ?? 'USDC'}
                       <ChevronDown className="size-3 opacity-60" />
                     </button>
                     {tokenMenuOpen && (
-                      <div className="absolute left-0 top-full z-10 mt-1 w-24 overflow-hidden rounded-xl bg-white shadow-lg" style={{ border: '1px solid var(--border)' }}>
-                        {(['USDC', 'OUSD'] as ReceiveToken[]).map(t => (
-                          <button key={t} onClick={() => { setReceiveToken(t); setTokenMenuOpen(false) }}
+                      <div className="absolute left-0 top-full z-10 mt-1 w-36 overflow-hidden rounded-xl bg-white shadow-lg" style={{ border: '1px solid var(--border)' }}>
+                        {receivableTokens.map(t => (
+                          <button key={t.symbol} onClick={() => { setSelectedSymbol(t.symbol); setTokenMenuOpen(false) }}
                             className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold hover:bg-slate-50"
-                            style={{ color: t === receiveToken ? 'var(--accent)' : 'var(--ink)' }}>
-                            {t === 'USDC'
-                              ? <TokenUSDC variant="branded" size={13} />
-                              : <OUSDIcon size={14} />
-                            }
-                            {t}
+                            style={{ color: t.symbol === selectedSymbol ? 'var(--accent)' : 'var(--ink)' }}>
+                            <TokenIcon token={t} size={14} />
+                            <span>{t.symbol}</span>
                           </button>
                         ))}
                       </div>

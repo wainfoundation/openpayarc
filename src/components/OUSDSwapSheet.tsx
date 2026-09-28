@@ -51,6 +51,10 @@ const SWAP_ABI = [
   { name: 'paused',     type: 'function', stateMutability: 'view',       inputs: [], outputs: [{ type: 'bool' }] },
 ] as const
 
+const OUSD_TOKEN_ABI = [
+  { name: 'swapContractSet', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'bool' }] },
+] as const
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function computeFeeLocal(amount: bigint): { fee: bigint; net: bigint } {
   if (amount === 0n) return { fee: 0n, net: 0n }
@@ -112,6 +116,11 @@ function OUSDSwapInner({ onClose }: { onClose: () => void }) {
     address: OUSD_SWAP, abi: SWAP_ABI, functionName: 'paused',
     query: { enabled: !wrongChain && !notDeployed },
   })
+  const { data: swapContractSet = true } = useReadContract({
+    address: OUSD_TOKEN, abi: OUSD_TOKEN_ABI, functionName: 'swapContractSet',
+    query: { enabled: canRead },
+  })
+  const notWired = canRead && !swapContractSet
 
   const publicClient = usePublicClient()
   const { writeContractAsync } = useWriteContract()
@@ -142,12 +151,20 @@ function OUSDSwapInner({ onClose }: { onClose: () => void }) {
           address: OUSD_SWAP, abi: SWAP_ABI, functionName: 'mintOUSD', args: [amount],
         })
         setTxHash(mintTx)
+        if (publicClient) {
+          const receipt = await publicClient.waitForTransactionReceipt({ hash: mintTx })
+          if (receipt.status !== 'success') throw new Error('Mint transaction reverted. The swap contract may not be authorized on the OUSD token yet (setSwapContract not called).')
+        }
       } else {
         stepRef.current = 'swapping'; setStep('swapping')
         const redeemTx = await writeContractAsync({
           address: OUSD_SWAP, abi: SWAP_ABI, functionName: 'redeemOUSD', args: [amount],
         })
         setTxHash(redeemTx)
+        if (publicClient) {
+          const receipt = await publicClient.waitForTransactionReceipt({ hash: redeemTx })
+          if (receipt.status !== 'success') throw new Error('Redeem transaction reverted. You may not have enough OUSD balance.')
+        }
       }
       stepRef.current = 'done'; setStep('done')
       refresh()
@@ -224,6 +241,21 @@ function OUSDSwapInner({ onClose }: { onClose: () => void }) {
                   style={{ background: OUSD_BLUE, color: 'white' }}
                 >Try on Testnet</button>
               </div>
+            </div>
+          )}
+
+          {/* Not wired — setSwapContract not called yet */}
+          {notWired && !wrongChain && !notDeployed && (
+            <div className="rounded-2xl p-4" style={{ background: '#FFF3E0', border: '1px solid #FFB74D' }}>
+              <div className="flex items-center gap-2 mb-1" style={{ color: '#E65100' }}>
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <p className="text-sm font-semibold">Contract setup pending</p>
+              </div>
+              <p className="text-xs" style={{ color: '#BF360C' }}>
+                The OUSD swap is not yet authorized. The contract owner must call{' '}
+                <code className="font-mono bg-orange-100 px-1 rounded">setSwapContract</code>{' '}
+                on the OUSD token before minting is enabled.
+              </p>
             </div>
           )}
 
@@ -417,7 +449,7 @@ function OUSDSwapInner({ onClose }: { onClose: () => void }) {
           </div>
 
           {/* CTA */}
-          {step !== 'done' && !wrongChain && !isPaused && !notDeployed && (
+          {step !== 'done' && !wrongChain && !isPaused && !notDeployed && !notWired && (
             <button
               disabled={inProgress || amount === 0n || !address || (direction === 'buy' && usdcBal < amount) || (direction === 'sell' && ousdBal < amount)}
               onClick={() => void handleSwap()}

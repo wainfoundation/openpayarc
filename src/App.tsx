@@ -34,6 +34,13 @@ import { OUSDSwapSheet } from '@/components/OUSDSwapSheet'
 import OUSDInfoSheet from '@/components/OUSDInfoSheet'
 import OUSDIcon from '@/components/OUSDIcon'
 import { useTheme } from '@/hooks/useTheme'
+import EURCSheet from '@/components/EURCSheet'
+import StableFXSheet from '@/components/StableFXSheet'
+import ChainlinkSheet from '@/components/ChainlinkSheet'
+import BatchSendSheet from '@/components/BatchSendSheet'
+import AgentSheet from '@/components/AgentSheet'
+import UnifiedBalanceSheet from '@/components/UnifiedBalanceSheet'
+import USYCSheet from '@/components/USYCSheet'
 
 const OUSD_BLUE = '#0D47D1'
 const OUSD_LIGHT = '#E8EFFE'
@@ -552,8 +559,8 @@ function ProfileTab({
           </div>
         </div>
 
-        {/* OUSD card */}
-        <div className="overflow-hidden rounded-2xl shadow-sm" style={{ border: `1px solid ${OUSD_BORDER}`, background: OUSD_LIGHT }}>
+        {/* OUSD card — gated by ousd feature flag */}
+        {features.ousd && <div className="overflow-hidden rounded-2xl shadow-sm" style={{ border: `1px solid ${OUSD_BORDER}`, background: OUSD_LIGHT }}>
           <div className="flex items-center gap-3 px-4 py-3.5">
             <OUSDIcon size={36} />
             <div className="flex-1 min-w-0">
@@ -597,7 +604,7 @@ function ProfileTab({
               </div>
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* Connected Accounts — feature-gated */}
         {features.connectedAccounts && (
@@ -625,6 +632,66 @@ function ProfileTab({
             </div>
           </div>
         )}
+
+        {/* Resources */}
+        <div className="rounded-2xl overflow-hidden shadow-sm" style={{ border: '1px solid var(--border)', background: 'var(--surface)' }}>
+          <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--muted)' }}>Resources</p>
+          </div>
+          {/* Arc Whitepaper */}
+          <a
+            href="https://6778953.fs1.hubspotusercontent-na1.net/hubfs/6778953/PDFs/arc_whitepaper.pdf"
+            target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-slate-50 border-b"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <div className="flex size-9 items-center justify-center rounded-xl shrink-0" style={{ background: '#0B1736' }}>
+              <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+                <circle cx="16" cy="16" r="16" fill="#0B1736"/>
+                <path d="M8 24V8h10l6 6v10H8z" fill="none" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/>
+                <path d="M18 8v6h6" fill="none" stroke="white" strokeWidth="1.5" strokeLinejoin="round"/>
+                <line x1="11" y1="15" x2="21" y2="15" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
+                <line x1="11" y1="18" x2="21" y2="18" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
+                <line x1="11" y1="21" x2="17" y2="21" stroke="white" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>Arc Whitepaper</p>
+              <p className="text-xs truncate" style={{ color: 'var(--muted)' }}>The Arc blockchain · PDF · Circle</p>
+            </div>
+            <ExternalLink className="size-4 shrink-0 text-slate-300" />
+          </a>
+          {/* OUSD Whitepaper */}
+          <button
+            onClick={onOusdInfo}
+            className="flex w-full items-center gap-3 px-4 py-3.5 transition-colors hover:bg-slate-50 border-b"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <div className="flex size-9 items-center justify-center rounded-xl shrink-0" style={{ background: OUSD_BLUE }}>
+              <OUSDIcon size={20} />
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>OUSD Whitepaper</p>
+              <p className="text-xs truncate" style={{ color: 'var(--muted)' }}>OpenPay OpenUSD · ERC-20 · Arc</p>
+            </div>
+            <ChevronDown className="size-4 shrink-0 -rotate-90 text-slate-300" />
+          </button>
+          {/* Arc Docs */}
+          <a
+            href="https://docs.arc.io"
+            target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-slate-50"
+          >
+            <div className="flex size-9 items-center justify-center rounded-xl shrink-0" style={{ background: '#eff6ff' }}>
+              <BookOpen className="size-4 text-blue-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>Arc Developer Docs</p>
+              <p className="text-xs truncate" style={{ color: 'var(--muted)' }}>docs.arc.io</p>
+            </div>
+            <ExternalLink className="size-4 shrink-0 text-slate-300" />
+          </a>
+        </div>
 
         {/* Legal / Support */}
         {legalItems.length > 0 && (
@@ -713,6 +780,13 @@ function HomeScreen({
   onSupport,
   onOusd,
   onOusdInfo,
+  onEurc,
+  onStableFX,
+  onChainlink,
+  onBatchSend,
+  onAgent,
+  onUnified,
+  onUsyc,
   onTxClick,
 }: {
   txHistory: TxRecord[]
@@ -729,6 +803,13 @@ function HomeScreen({
   onSupport: () => void
   onOusd: () => void
   onOusdInfo: () => void
+  onEurc: () => void
+  onStableFX: () => void
+  onChainlink: () => void
+  onBatchSend: () => void
+  onAgent: () => void
+  onUnified: () => void
+  onUsyc: () => void
   onTxClick: (tx: TxRecord) => void
 }) {
   const { chainId: targetChainId, isTestnet, features } = useNetwork()
@@ -821,8 +902,8 @@ function HomeScreen({
             </span>
           </div>
 
-          {/* OUSD balance row — shown on both networks */}
-          {isConnected && (
+          {/* OUSD balance row — gated by ousd feature flag */}
+          {isConnected && features.ousd && (
             <div className="mb-4 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: OUSD_LIGHT, border: `1px solid ${OUSD_BORDER}` }}>
               <OUSDIcon size={20} />
               {!ousdDeployed ? (
@@ -888,13 +969,18 @@ function HomeScreen({
             {features.scanner  && <QuickAction icon={<QrCode className="size-5" />} label="Scan" onClick={onQR} />}
           </div>
           {/* Second row — only render if at least one item is visible */}
-          {(features.swap || features.payLinks || features.savings || features.ledger) && (
-            <div className="mt-3 pt-3 border-t flex justify-around" style={{ borderColor: 'var(--border)' }}>
-              {features.swap     && <QuickAction icon={<ArrowUpDown className="size-5" />} label="Swap" onClick={onSwap} />}
-              {features.swap     && <QuickAction icon={<OUSDIcon size={20} />} label="OUSD" onClick={onOusd} />}
-              {features.payLinks && <QuickAction icon={<Link2 className="size-5" />} label="Pay Links" onClick={onQRPay} />}
-              {features.savings  && <QuickAction icon={<PiggyBank className="size-5" />} label="Savings" onClick={onSavings} />}
-              {features.ledger   && <QuickAction icon={<LayoutGrid className="size-5" />} label="Ledger" onClick={onLedger} />}
+          {(features.swap || features.ousd || features.payLinks || features.savings || features.ledger ||
+            features.eurc || features.stableFX || features.batchSend || features.usyc) && (
+            <div className="mt-3 pt-3 border-t flex flex-wrap justify-around gap-y-2" style={{ borderColor: 'var(--border)' }}>
+              {features.swap          && <QuickAction icon={<ArrowUpDown className="size-5" />} label="Swap" onClick={onSwap} />}
+              {features.ousd          && <QuickAction icon={<OUSDIcon size={20} />} label="OUSD" onClick={onOusd} />}
+              {features.eurc          && <QuickAction icon={<span className="text-blue-700 font-black text-xs">€</span>} label="EURC" onClick={onEurc} />}
+              {features.stableFX      && <QuickAction icon={<ArrowUpDown className="size-5 text-green-600" />} label="FX" onClick={onStableFX} />}
+              {features.batchSend     && <QuickAction icon={<span className="font-bold text-xs">×N</span>} label="Batch" onClick={onBatchSend} />}
+              {features.usyc          && <QuickAction icon={<span className="font-bold text-xs text-amber-600">%</span>} label="USYC" onClick={onUsyc} />}
+              {features.payLinks      && <QuickAction icon={<Link2 className="size-5" />} label="Pay Links" onClick={onQRPay} />}
+              {features.savings       && <QuickAction icon={<PiggyBank className="size-5" />} label="Savings" onClick={onSavings} />}
+              {features.ledger        && <QuickAction icon={<LayoutGrid className="size-5" />} label="Ledger" onClick={onLedger} />}
             </div>
           )}
         </div>
@@ -929,16 +1015,62 @@ function HomeScreen({
               <ArrowUpDown className="size-5" />
               Swap
             </button>
-            <button onClick={onOusd} className="flex flex-col items-center gap-1.5 rounded-xl py-3 text-xs font-semibold transition-colors hover:opacity-80"
-              style={{ background: OUSD_LIGHT, color: OUSD_BLUE }}>
-              <OUSDIcon size={20} />
-              OpenUSD
-            </button>
-            <button onClick={onOusdInfo} className="flex flex-col items-center gap-1.5 rounded-xl py-3 text-xs font-semibold transition-colors hover:opacity-80"
-              style={{ background: OUSD_LIGHT, color: OUSD_BLUE }}>
-              <BookOpen className="size-5" />
-              Whitepaper
-            </button>
+            {features.ousd && (
+              <button onClick={onOusd} className="flex flex-col items-center gap-1.5 rounded-xl py-3 text-xs font-semibold transition-colors hover:opacity-80"
+                style={{ background: OUSD_LIGHT, color: OUSD_BLUE }}>
+                <OUSDIcon size={20} />
+                OpenUSD
+              </button>
+            )}
+            {features.ousd && (
+              <button onClick={onOusdInfo} className="flex flex-col items-center gap-1.5 rounded-xl py-3 text-xs font-semibold transition-colors hover:opacity-80"
+                style={{ background: OUSD_LIGHT, color: OUSD_BLUE }}>
+                <BookOpen className="size-5" />
+                Whitepaper
+              </button>
+            )}
+            {features.eurc && (
+              <button onClick={onEurc} className="flex flex-col items-center gap-1.5 rounded-xl bg-blue-50 py-3 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors">
+                <span className="text-lg font-black leading-none">€</span>
+                EURC
+              </button>
+            )}
+            {features.stableFX && (
+              <button onClick={onStableFX} className="flex flex-col items-center gap-1.5 rounded-xl bg-green-50 py-3 text-xs font-semibold text-green-700 hover:bg-green-100 transition-colors">
+                <ArrowUpDown className="size-5" />
+                StableFX
+              </button>
+            )}
+            {features.chainlink && (
+              <button onClick={onChainlink} className="flex flex-col items-center gap-1.5 rounded-xl bg-orange-50 py-3 text-xs font-semibold text-orange-700 hover:bg-orange-100 transition-colors">
+                <span className="text-base font-black leading-none">⬡</span>
+                Prices
+              </button>
+            )}
+            {features.batchSend && (
+              <button onClick={onBatchSend} className="flex flex-col items-center gap-1.5 rounded-xl bg-purple-50 py-3 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition-colors">
+                <span className="text-sm font-black leading-none">×N</span>
+                Batch
+              </button>
+            )}
+            {features.agentEconomy && (
+              <button onClick={onAgent} className="flex flex-col items-center gap-1.5 rounded-xl bg-slate-50 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors">
+                <span className="text-base font-black leading-none">⬡</span>
+                Agents
+              </button>
+            )}
+            {features.unifiedBalance && (
+              <button onClick={onUnified} className="flex flex-col items-center gap-1.5 rounded-xl bg-indigo-50 py-3 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors">
+                <LayoutGrid className="size-5" />
+                Unified
+              </button>
+            )}
+            {features.usyc && (
+              <button onClick={onUsyc} className="flex flex-col items-center gap-1.5 rounded-xl bg-amber-50 py-3 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors">
+                <span className="text-sm font-black leading-none">%</span>
+                USYC
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -1024,7 +1156,7 @@ function HomeScreen({
 // ─── Root App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const { chainId: targetChainId, isTestnet, mode, setMode } = useNetwork()
+  const { chainId: targetChainId, isTestnet, mode, setMode, features } = useNetwork()
   const { address } = useAccount()
   const [sendOpen, setSendOpen] = useState(false)
   const [sendPrefill, setSendPrefill] = useState<string | undefined>()
@@ -1040,6 +1172,13 @@ export default function App() {
   const [qrPayOpen,   setQrPayOpen]     = useState(false)
   const [ousdOpen,    setOusdOpen]      = useState(false)
   const [ousdInfoOpen, setOusdInfoOpen] = useState(false)
+  const [eurcOpen,    setEurcOpen]      = useState(false)
+  const [stableFXOpen, setStableFXOpen] = useState(false)
+  const [chainlinkOpen, setChainlinkOpen] = useState(false)
+  const [batchSendOpen, setBatchSendOpen] = useState(false)
+  const [agentOpen,   setAgentOpen]     = useState(false)
+  const [unifiedOpen, setUnifiedOpen]   = useState(false)
+  const [usycOpen,    setUsycOpen]      = useState(false)
   const [bridgeOpen, setBridgeOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<NavTab>('home')
   const [txHistory, setTxHistory] = useState<TxRecord[]>([])
@@ -1243,6 +1382,13 @@ export default function App() {
             onSupport={() => setSupportOpen(true)}
             onOusd={() => setOusdOpen(true)}
             onOusdInfo={() => setOusdInfoOpen(true)}
+            onEurc={() => setEurcOpen(true)}
+            onStableFX={() => setStableFXOpen(true)}
+            onChainlink={() => setChainlinkOpen(true)}
+            onBatchSend={() => setBatchSendOpen(true)}
+            onAgent={() => setAgentOpen(true)}
+            onUnified={() => setUnifiedOpen(true)}
+            onUsyc={() => setUsycOpen(true)}
             onTxClick={setReceiptTx}
           />
         )}
@@ -1287,6 +1433,13 @@ export default function App() {
       <QRPaySheet open={qrPayOpen} onClose={() => setQrPayOpen(false)} />
       <OUSDSwapSheet open={ousdOpen} onClose={() => setOusdOpen(false)} />
       <OUSDInfoSheet open={ousdInfoOpen} onClose={() => setOusdInfoOpen(false)} onSwap={() => { setOusdInfoOpen(false); setTimeout(() => setOusdOpen(true), 220) }} />
+      {features.eurc && <EURCSheet open={eurcOpen} onClose={() => setEurcOpen(false)} />}
+      {features.stableFX && <StableFXSheet open={stableFXOpen} onClose={() => setStableFXOpen(false)} />}
+      {features.chainlink && <ChainlinkSheet open={chainlinkOpen} onClose={() => setChainlinkOpen(false)} />}
+      {features.batchSend && <BatchSendSheet open={batchSendOpen} onClose={() => setBatchSendOpen(false)} />}
+      {features.agentEconomy && <AgentSheet open={agentOpen} onClose={() => setAgentOpen(false)} />}
+      {features.unifiedBalance && <UnifiedBalanceSheet open={unifiedOpen} onClose={() => setUnifiedOpen(false)} />}
+      {features.usyc && <USYCSheet open={usycOpen} onClose={() => setUsycOpen(false)} />}
       <SavingsSheet
         open={savingsOpen}
         onClose={() => setSavingsOpen(false)}

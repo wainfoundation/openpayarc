@@ -13,7 +13,7 @@
 import './tracing'
 import './console-capture'
 
-import { StrictMode, useEffect } from 'react'
+import { StrictMode, useEffect, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -28,13 +28,33 @@ import { NetworkProvider } from './NetworkContext'
 
 import './index.css'
 
-/** Closes the ConnectKit modal as soon as a wallet connects. */
+/**
+ * Closes the ConnectKit modal only when a wallet JUST connected
+ * (i.e. was disconnected when the modal opened). If the user clicks
+ * the wallet button while already connected to manage/switch networks,
+ * the modal stays open normally.
+ */
 function AutoCloseOnConnect() {
   const { isConnected } = useAccount()
-  const { setOpen } = useModal()
+  const { open, setOpen } = useModal()
+  // Track whether wallet was already connected when modal last opened
+  const wasConnectedOnOpen = useRef(false)
+
   useEffect(() => {
-    if (isConnected) setOpen(false)
-  }, [isConnected, setOpen])
+    if (open) {
+      // Record connection state at the moment the modal opens
+      wasConnectedOnOpen.current = isConnected
+    }
+  }, [open, isConnected])
+
+  useEffect(() => {
+    // Only auto-close if wallet was NOT connected when modal opened
+    // (fresh connect flow completed)
+    if (isConnected && open && !wasConnectedOnOpen.current) {
+      setOpen(false)
+    }
+  }, [isConnected, open, setOpen])
+
   return null
 }
 

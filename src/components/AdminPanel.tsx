@@ -20,8 +20,9 @@ import {
 import {
   useNetwork, type NetworkMode,
   ALL_PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethodKey,
-  ALL_FEATURES, FEATURE_LABELS,
+  ALL_FEATURES, FEATURE_LABELS, type FeatureFlagKey,
 } from '@/NetworkContext'
+import OUSDIcon from '@/components/OUSDIcon'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -321,12 +322,36 @@ export default function AdminPanel({ open, onClose }: Props) {
                         </button>
                       </div>
 
+                      {/* OUSD master switch — pinned at top */}
+                      <div className="rounded-2xl overflow-hidden" style={{ border: '2px solid #0D47D1', background: features.ousd ? '#E8EFFE' : '#f8f8f8' }}>
+                        <div className="flex items-center gap-3 px-4 py-3.5">
+                          <div className="shrink-0 opacity-100">
+                            <OUSDIcon size={36} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-bold" style={{ color: '#0D47D1' }}>OpenPay OpenUSD (OUSD)</p>
+                            <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                              {features.ousd
+                                ? 'Visible — balance, swap, send/receive shown'
+                                : 'Hidden — all OUSD removed from mainnet & testnet'}
+                            </p>
+                          </div>
+                          <Toggle on={features.ousd} onToggle={() => setFeature('ousd', !features.ousd)} />
+                        </div>
+                        {!features.ousd && (
+                          <div className="flex gap-2 border-t px-4 py-2.5" style={{ borderColor: '#C5D5F8', background: '#FEF3C7' }}>
+                            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+                            <p className="text-xs text-amber-700">OUSD balance row, swap sheet, send option, info sheet and More-tab entry are all hidden.</p>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="rounded-2xl" style={glass.card}>
                         <p className="px-4 pt-4 text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--muted)' }}>
-                          Dashboard Features
+                          All Features
                         </p>
                         <div className="mt-2 divide-y divide-black/5 px-4 pb-2">
-                          {ALL_FEATURES.map(key => {
+                          {(ALL_FEATURES.filter(k => k !== 'ousd') as FeatureFlagKey[]).map(key => {
                             const { label, sub } = FEATURE_LABELS[key]
                             const enabled = features[key]
                             return (

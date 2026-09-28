@@ -1,23 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { TxRecord } from './ActivityFeed'
 import { AnimatePresence, motion } from 'framer-motion'
-import { X, Loader2, ExternalLink, ArrowRight, ChevronLeft, AlertTriangle, ChevronDown } from 'lucide-react'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useReadContract } from 'wagmi'
+import { X, Loader2, ExternalLink, ArrowRight, ChevronLeft, AlertTriangle, ChevronDown, Check } from 'lucide-react'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useReadContract, useChainId } from 'wagmi'
 import { erc20Abi, isAddress, parseUnits } from 'viem'
-import { getUsdc, buildTxExplorerUrl, requireChain } from '@/onchain-facts'
-import { Amount, usdcDecimalsFor } from '@/onchain-money'
+import { buildTxExplorerUrl, requireChain } from '@/onchain-facts'
 import { TokenUSDC } from '@web3icons/react'
 import OUSDIcon from './OUSDIcon'
 import { useNetwork } from '@/NetworkContext'
 import { useNetworkFee } from '@/hooks/useNetworkFee'
 import { FEE_WALLET, calcPlatformFee, formatFee } from '@/hooks/usePlatformFee'
-
-// OUSD token addresses per chain
-const OUSD_ADDRESSES: Record<number, `0x${string}`> = {
-  5042002: '0xdd9cb6cbe39f5caf475241124e749875d7e7b355', // Arc Testnet (latest)
-  // 5042: '0x...' // Arc Mainnet — add when deployed
-}
-const OUSD_ADDRESS = '0xdd9cb6cbe39f5caf475241124e749875d7e7b355' as `0x${string}` // fallback
+import { getArcTokens, type ArcToken } from '@/arcTokens'
 
 const spectral = 'linear-gradient(90deg, #5fbeff, #af8ff4, #f05c6b, #ffcd83, #7ef1b3)'
 const springs = { sheet: { type: 'spring', damping: 32, stiffness: 300 } }
@@ -32,7 +25,23 @@ function parseOnchainError(error: unknown): string {
   return 'Something went wrong. Please try again.'
 }
 
-type Phase = 'form' | 'review' | 'fee' | 'sending' | 'success'
+/** Token icon for any Arc token */
+function TokenIcon({ token, size = 18 }: { token: ArcToken; size?: number }) {
+  if (token.symbol === 'USDC') return <TokenUSDC variant="branded" size={size} />
+  if (token.symbol === 'OUSD') return <OUSDIcon size={size} />
+  // Generic circle icon with token color
+  const initials: Record<string, string> = { EURC: '€', USYC: '⬡', cirBTC: '₿' }
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      style={{ width: size, height: size, background: token.color, fontSize: size * 0.45 }}
+    >
+      {initials[token.symbol] ?? token.symbol[0]}
+    </div>
+  )
+}
+
+type Phase = 'form' | 'review' | 'sending' | 'success'
 
 interface Props {
   open: boolean
@@ -41,61 +50,62 @@ interface Props {
   onTxSent?: (tx: TxRecord) => void
 }
 
+/** Read a single token balance */
+function useTokenBalance(token: ArcToken | undefined, address: `0x${string}` | undefined, chainId: number) {
+  const enabled = Boolean(address) && Boolean(token?.address)
+  const { data } = useReadContract({
+    address: token?.address,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    chainId,
+    query: { enabled },
+  })
+  if (!data || !token) return null
+  return (Number(data) / 10 ** token.decimals).toFixed(token.decimals === 8 ? 8 : 2)
+}
+
 export default function SendSheet({ open, onClose, prefillTo, onTxSent }: Props) {
-  const { chainId: targetChainId, chainName, isTestnet } = useNetwork()
+  const { chainId: targetChainId, chainName, isTestnet, features } = useNetwork()
   const { feeUSDC, isLoading: feeLoading } = useNetworkFee()
-  const { address, chainId } = useAccount()
+  const { address } = useAccount()
+  const walletChainId = useChainId()
   const { switchChain } = useSwitchChain()
 
-  const usdcFact = getUsdc(targetChainId)
-  const USDC_ADDRESS = (usdcFact?.address ?? '0x0') as `0x${string}`
-  const decimals = usdcDecimalsFor(targetChainId)
+  // Build the list of tokens the user can send (filtered by feature flags + availability)
+  const allTokens = getArcTokens(targetChainId)
+  const sendableTokens = allTokens.filter(t => {
+    if (!t.address) return false // not deployed on this chain
+    if (t.featureKey && !(features as Record<string, boolean>)[t.featureKey]) return false
+    return true
+  })
 
-  const [token, setToken] = useState<'USDC' | 'OUSD'>('USDC')
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('USDC')
   const [tokenMenuOpen, setTokenMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
-  // Active token address & decimals
-  const activeTokenAddress = token === 'OUSD' ? OUSD_ADDRESS : USDC_ADDRESS
-  const activeDecimals = 6 // both USDC and OUSD use 6 decimals
+  // If selected token is no longer sendable (feature disabled), fall back to USDC
+  const selectedToken = sendableTokens.find(t => t.symbol === selectedSymbol) ?? sendableTokens[0]
+  useEffect(() => {
+    if (!sendableTokens.find(t => t.symbol === selectedSymbol)) setSelectedSymbol('USDC')
+  }, [isTestnet, features, sendableTokens, selectedSymbol])
 
-  const { data: rawBalance } = useReadContract({
-    address: USDC_ADDRESS,
-    abi: erc20Abi,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    chainId: targetChainId,
-    query: { enabled: Boolean(address) && Boolean(usdcFact) },
-  })
+  const usdcToken = allTokens.find(t => t.symbol === 'USDC')
 
-  const { data: rawOusdBalance } = useReadContract({
-    address: OUSD_ADDRESS,
-    abi: erc20Abi,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    query: { enabled: Boolean(address) && isTestnet && token === 'OUSD' },
-  })
-
-  const formattedBalance = token === 'OUSD'
-    ? (rawOusdBalance != null ? (Number(rawOusdBalance) / 10 ** 6).toFixed(2) : null)
-    : (rawBalance != null ? Amount.fromRaw(rawBalance, decimals).toFixed(2) : null)
+  const balance = useTokenBalance(selectedToken, address, targetChainId)
 
   const [recipient, setRecipient] = useState(prefillTo ?? '')
   const [amount, setAmount] = useState('')
   const [memo, setMemo] = useState('')
   const [phase, setPhase] = useState<Phase>('form')
 
-
-
-  const isWrongChain = chainId !== targetChainId
+  const isWrongChain = walletChainId !== targetChainId
   const recipientValid = isAddress(recipient)
   const amountNum = parseFloat(amount)
   const amountValid = !isNaN(amountNum) && amountNum > 0
 
-  // Fee transfer (step 1)
   const { writeContract: writeFee, data: feeHash, isPending: feePending, isError: feeError, error: feeErr, reset: resetFee } = useWriteContract()
   const { isLoading: feeConfirming, isSuccess: feeSuccess } = useWaitForTransactionReceipt({ hash: feeHash })
-
-  // Main transfer (step 2)
   const { writeContract: writeMain, data: mainHash, isPending: mainPending, isError: mainError, error: mainErr, reset: resetMain } = useWriteContract()
   const { isLoading: mainConfirming, isSuccess: mainSuccess } = useWaitForTransactionReceipt({ hash: mainHash })
 
@@ -107,14 +117,13 @@ export default function SendSheet({ open, onClose, prefillTo, onTxSent }: Props)
 
   // After fee tx confirmed → send main transfer
   useEffect(() => {
-    if (feeSuccess) {
-      const raw = BigInt(Math.round(parseFloat(amount) * 10 ** activeDecimals))
-      writeMain({ address: activeTokenAddress, abi: erc20Abi, functionName: 'transfer', args: [recipient as `0x${string}`, raw] })
+    if (feeSuccess && selectedToken?.address) {
+      const raw = BigInt(Math.round(parseFloat(amount) * 10 ** (selectedToken.decimals)))
+      writeMain({ address: selectedToken.address, abi: erc20Abi, functionName: 'transfer', args: [recipient as `0x${string}`, raw] })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feeSuccess])
 
-  // After main tx confirmed → success
   useEffect(() => {
     if (mainSuccess && mainHash && onTxSent) {
       onTxSent({ hash: mainHash, direction: 'sent', amount: parseFloat(amount).toFixed(2), counterparty: recipient, timestamp: Date.now(), memo })
@@ -123,10 +132,18 @@ export default function SendSheet({ open, onClose, prefillTo, onTxSent }: Props)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainSuccess])
 
-  // Track sending phase
   useEffect(() => {
     if (feePending || feeConfirming || mainPending || mainConfirming) setPhase('sending')
   }, [feePending, feeConfirming, mainPending, mainConfirming])
+
+  // Close menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setTokenMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   const handleClose = () => {
     if (!feePending && !feeConfirming && !mainPending && !mainConfirming) {
@@ -141,10 +158,9 @@ export default function SendSheet({ open, onClose, prefillTo, onTxSent }: Props)
   }
 
   const handleConfirm = () => {
-    // Fee is always paid in USDC regardless of send token
     const feeAmount = parseUnits(platformFee.toFixed(6), 6)
     writeFee({
-      address: USDC_ADDRESS,
+      address: usdcToken!.address!,
       abi: erc20Abi,
       functionName: 'transfer',
       args: [FEE_WALLET as `0x${string}`, feeAmount],
@@ -152,18 +168,13 @@ export default function SendSheet({ open, onClose, prefillTo, onTxSent }: Props)
   }
 
   const formReady = recipientValid && amountValid
-
-  const _isPending = feePending || mainPending
-  const _isConfirming = feeConfirming || mainConfirming
   const isError = feeError || mainError
   const error = feeErr ?? mainErr
+  const inProgress = feePending || feeConfirming || mainPending || mainConfirming
 
-  const sendingLabel = feePending
-    ? 'Confirm fee in wallet…'
-    : feeConfirming
-    ? 'Processing fee transfer…'
-    : mainPending
-    ? 'Confirm transfer in wallet…'
+  const sendingLabel = feePending ? 'Confirm fee in wallet…'
+    : feeConfirming ? 'Processing fee…'
+    : mainPending ? 'Confirm transfer in wallet…'
     : 'Confirming transfer…'
 
   return (
@@ -185,18 +196,18 @@ export default function SendSheet({ open, onClose, prefillTo, onTxSent }: Props)
               <div className="mb-5 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {phase === 'review' && (
-                    <button onClick={() => setPhase('form')} className="flex size-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200">
+                    <button onClick={() => setPhase('form')} className="flex size-8 items-center justify-center rounded-full bg-slate-100 text-slate-500">
                       <ChevronLeft className="size-4" />
                     </button>
                   )}
                   <div>
                     <h2 className="display text-lg font-bold" style={{ color: 'var(--ink)' }}>
-                      {phase === 'review' ? 'Review & Confirm' : phase === 'success' ? 'Sent!' : `Send ${token}`}
+                      {phase === 'review' ? 'Review & Confirm' : phase === 'success' ? '✓ Sent!' : `Send ${selectedToken?.symbol ?? 'Token'}`}
                     </h2>
                     <p className="text-xs" style={{ color: 'var(--muted)' }}>{chainName}</p>
                   </div>
                 </div>
-                <button onClick={handleClose} className="flex size-8 items-center justify-center rounded-full transition-colors" style={{ background: 'var(--surface-muted)' }}>
+                <button onClick={handleClose} className="flex size-8 items-center justify-center rounded-full" style={{ background: 'var(--surface-muted)' }}>
                   <X className="size-4" style={{ color: 'var(--muted)' }} />
                 </button>
               </div>
@@ -206,11 +217,9 @@ export default function SendSheet({ open, onClose, prefillTo, onTxSent }: Props)
                 <div className="space-y-4">
                   <div className="rounded-2xl p-5 text-center" style={glass.inner}>
                     <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full" style={{ background: 'rgba(26,128,71,0.1)' }}>
-                      <svg className="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: 'var(--success)' }}>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
+                      <Check className="size-6" style={{ color: 'var(--success)' }} />
                     </div>
-                    <p className="display text-base font-bold" style={{ color: 'var(--ink)' }}>Sent {amount} {token}</p>
+                    <p className="display text-base font-bold" style={{ color: 'var(--ink)' }}>Sent {amount} {selectedToken?.symbol}</p>
                     <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>Confirmed on {chainName}</p>
                     {txUrl && (
                       <a href={txUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--accent-hover)' }}>
@@ -227,15 +236,10 @@ export default function SendSheet({ open, onClose, prefillTo, onTxSent }: Props)
                 <div className="space-y-4 py-4 text-center">
                   <Loader2 className="mx-auto size-10 animate-spin text-blue-500" />
                   <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{sendingLabel}</p>
-                  {/* Step indicator */}
                   <div className="flex items-center justify-center gap-2 text-xs text-slate-400">
-                    <span className={feeSuccess ? 'text-green-600 font-semibold' : feePending || feeConfirming ? 'text-blue-600 font-semibold' : ''}>
-                      {feeSuccess ? '✓' : '1.'} Platform fee
-                    </span>
+                    <span className={feeSuccess ? 'font-semibold text-green-600' : feePending || feeConfirming ? 'font-semibold text-blue-600' : ''}>{feeSuccess ? '✓' : '1.'} Fee</span>
                     <span>→</span>
-                    <span className={mainSuccess ? 'text-green-600 font-semibold' : mainPending || mainConfirming ? 'text-blue-600 font-semibold' : ''}>
-                      {mainSuccess ? '✓' : '2.'} Transfer
-                    </span>
+                    <span className={mainSuccess ? 'font-semibold text-green-600' : mainPending || mainConfirming ? 'font-semibold text-blue-600' : ''}>{mainSuccess ? '✓' : '2.'} Transfer</span>
                   </div>
                   <p className="text-xs text-slate-400">Do not close this window</p>
                   {isError && <p className="rounded-xl px-4 py-2.5 text-xs font-medium" style={{ background: 'rgba(186,43,76,0.08)', color: 'var(--danger)' }}>{parseOnchainError(error)}</p>}
@@ -249,87 +253,69 @@ export default function SendSheet({ open, onClose, prefillTo, onTxSent }: Props)
                   {!isTestnet && (
                     <div className="flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: '#fef2f2', border: '1px solid #fecaca' }}>
                       <AlertTriangle className="size-4 shrink-0 text-red-500" />
-                      <p className="text-xs font-semibold text-red-600">Mainnet — this uses real USDC. This transaction cannot be reversed.</p>
+                      <p className="text-xs font-semibold text-red-600">Mainnet — real {selectedToken?.symbol}. Irreversible.</p>
                     </div>
                   )}
-                  <div className="space-y-0 rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                  <div className="overflow-hidden rounded-2xl" style={{ border: '1px solid var(--border)' }}>
                     <ReviewRow label="To" value={`${recipient.slice(0,10)}...${recipient.slice(-8)}`} mono />
-                    <ReviewRow label="Amount" value={`${amount} ${token}`} highlight />
+                    <ReviewRow label="Token" value={selectedToken?.name ?? selectedToken?.symbol ?? ''} />
+                    <ReviewRow label="Amount" value={`${amount} ${selectedToken?.symbol}`} highlight />
                     <ReviewRow label="Network" value={chainName} />
                     {memo && <ReviewRow label="Memo" value={memo} />}
                     <ReviewRow label="Platform fee (1%)" value={platformFeeDisplay} subtle />
                     <ReviewRow label="Network fee" value={feeLoading ? 'Estimating…' : (feeUSDC ?? '~$0.00 USDC')} subtle />
                   </div>
-                  {/* Fee note */}
-                  <p className="text-center text-xs text-slate-400">
-                    Two transactions will be sent: the platform fee first, then your transfer.
-                  </p>
-                  <button
-                    onClick={handleConfirm}
-                    className="w-full rounded-2xl py-3.5 text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
-                    style={{ background: 'var(--accent)' }}
-                  >
+                  <p className="text-center text-xs text-slate-400">Two transactions: platform fee then transfer.</p>
+                  <button onClick={handleConfirm} disabled={inProgress}
+                    className="w-full rounded-2xl py-3.5 text-sm font-bold text-white transition-all hover:opacity-90 disabled:opacity-40"
+                    style={{ background: 'var(--accent)' }}>
                     <span className="flex items-center justify-center gap-1.5">Confirm & Send <ArrowRight className="size-4" /></span>
                   </button>
-                  <button onClick={() => setPhase('form')} className="w-full rounded-2xl py-3 text-sm font-semibold text-slate-500 hover:bg-slate-50">
-                    Cancel
-                  </button>
+                  <button onClick={() => setPhase('form')} className="w-full rounded-2xl py-3 text-sm font-semibold text-slate-500 hover:bg-slate-50">Cancel</button>
                 </div>
               )}
 
               {/* ── Form ── */}
               {phase === 'form' && (
                 <div className="space-y-3">
+                  {/* Recipient */}
                   <div className="rounded-2xl p-4" style={glass.inner}>
                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--muted)' }}>To</label>
-                    <input
-                      value={recipient}
-                      onChange={(e) => setRecipient(e.target.value.trim())}
-                      placeholder="0x..."
-                      className="mono w-full bg-transparent text-sm outline-none placeholder:text-slate-300"
-                      style={{ color: 'var(--ink)' }}
-                    />
+                    <input value={recipient} onChange={(e) => setRecipient(e.target.value.trim())}
+                      placeholder="0x..." className="mono w-full bg-transparent text-sm outline-none placeholder:text-slate-300" style={{ color: 'var(--ink)' }} />
                     {recipient && !recipientValid && <p className="mt-1 text-xs" style={{ color: 'var(--danger)' }}>Invalid address</p>}
                   </div>
 
+                  {/* Amount + Token selector */}
                   <div className="rounded-2xl p-4" style={glass.inner}>
                     <div className="flex items-center gap-3">
-                      <input
-                        inputMode="decimal"
-                        value={amount}
-                        onChange={(e) => {
-                          const v = e.target.value.replace(/[^0-9.]/g, '')
-                          if (v === '' || /^\d*\.?\d*$/.test(v)) setAmount(v)
-                        }}
+                      <input inputMode="decimal" value={amount}
+                        onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ''); if (v === '' || /^\d*\.?\d*$/.test(v)) setAmount(v) }}
                         placeholder="0.00"
                         className="display min-w-0 flex-1 bg-transparent text-3xl font-bold tabular-nums outline-none placeholder:text-slate-300"
-                        style={{ color: 'var(--ink)' }}
-                      />
+                        style={{ color: 'var(--ink)' }} />
+
                       {/* Token selector */}
-                      <div className="relative">
-                        <button
-                          onClick={() => setTokenMenuOpen(o => !o)}
+                      <div className="relative" ref={menuRef}>
+                        <button onClick={() => setTokenMenuOpen(o => !o)}
                           className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 transition-colors hover:bg-white/80"
-                          style={{ background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.8)' }}
-                        >
-                          {token === 'USDC'
-                            ? <TokenUSDC variant="branded" size={18} />
-                            : <OUSDIcon size={18} />
-                          }
-                          <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{token}</span>
+                          style={{ background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.8)' }}>
+                          {selectedToken && <TokenIcon token={selectedToken} size={18} />}
+                          <span className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>{selectedToken?.symbol}</span>
                           <ChevronDown className="size-3.5 text-slate-400" />
                         </button>
                         {tokenMenuOpen && (
-                          <div className="absolute right-0 top-full z-10 mt-1 w-28 overflow-hidden rounded-xl bg-white shadow-lg" style={{ border: '1px solid var(--border)' }}>
-                            {(['USDC', ...(isTestnet ? ['OUSD'] : [])] as ('USDC' | 'OUSD')[]).map(t => (
-                              <button key={t} onClick={() => { setToken(t); setTokenMenuOpen(false); setAmount('') }}
+                          <div className="absolute right-0 top-full z-10 mt-1 w-40 overflow-hidden rounded-xl bg-white shadow-lg" style={{ border: '1px solid var(--border)' }}>
+                            {sendableTokens.map(t => (
+                              <button key={t.symbol} onClick={() => { setSelectedSymbol(t.symbol); setTokenMenuOpen(false); setAmount('') }}
                                 className="flex w-full items-center gap-2 px-3 py-2.5 text-sm font-semibold hover:bg-slate-50"
-                                style={{ color: t === token ? 'var(--accent)' : 'var(--ink)' }}>
-                                {t === 'USDC'
-                                  ? <TokenUSDC variant="branded" size={16} />
-                                  : <OUSDIcon size={16} />
-                                }
-                                {t}
+                                style={{ color: t.symbol === selectedSymbol ? 'var(--accent)' : 'var(--ink)' }}>
+                                <TokenIcon token={t} size={16} />
+                                <div className="flex-1 text-left">
+                                  <div>{t.symbol}</div>
+                                  <div className="text-xs font-normal text-slate-400">{t.name}</div>
+                                </div>
+                                {t.symbol === selectedSymbol && <Check className="size-3.5 text-blue-500" />}
                               </button>
                             ))}
                           </div>
@@ -338,42 +324,29 @@ export default function SendSheet({ open, onClose, prefillTo, onTxSent }: Props)
                     </div>
                     <div className="mt-2 flex items-center justify-between">
                       <span className="text-xs" style={{ color: 'var(--muted)' }}>{chainName}</span>
-                      {formattedBalance != null && (
-                        <button onClick={() => setAmount(formattedBalance)} className="text-xs font-semibold" style={{ color: 'var(--accent-hover)' }}>
-                          Balance: {formattedBalance} · Max
+                      {balance != null && (
+                        <button onClick={() => setAmount(balance)} className="text-xs font-semibold" style={{ color: 'var(--accent-hover)' }}>
+                          Balance: {balance} · Max
                         </button>
                       )}
                     </div>
                   </div>
 
+                  {/* Memo */}
                   <div className="rounded-2xl p-4" style={glass.inner}>
                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--muted)' }}>Memo (optional)</label>
-                    <input
-                      value={memo}
-                      onChange={(e) => setMemo(e.target.value)}
-                      placeholder="What's this for?"
-                      className="w-full bg-transparent text-sm outline-none placeholder:text-slate-300"
-                      style={{ color: 'var(--ink)' }}
-                    />
+                    <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="What's this for?"
+                      className="w-full bg-transparent text-sm outline-none placeholder:text-slate-300" style={{ color: 'var(--ink)' }} />
                   </div>
 
-                  {/* Fee preview */}
                   {amountValid && (
-                    <p className="text-center text-xs text-slate-400">
-                      Platform fee: <span className="font-semibold text-slate-500">{platformFeeDisplay}</span> (1% · min $0.01)
-                    </p>
+                    <p className="text-center text-xs text-slate-400">Platform fee: <span className="font-semibold text-slate-500">{platformFeeDisplay}</span> (1% · min $0.01)</p>
                   )}
 
-                  <button
-                    disabled={!formReady}
-                    onClick={handleReview}
+                  <button disabled={!formReady} onClick={handleReview}
                     className="w-full rounded-2xl py-3.5 text-sm font-semibold text-white transition-all hover:opacity-90 hover:scale-[1.01] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
-                    style={{ background: 'var(--accent)' }}
-                  >
-                    {isWrongChain
-                      ? `Switch to ${chainName}`
-                      : <span className="flex items-center justify-center gap-1.5">Review <ArrowRight className="size-4" /></span>
-                    }
+                    style={{ background: 'var(--accent)' }}>
+                    {isWrongChain ? `Switch to ${chainName}` : <span className="flex items-center justify-center gap-1.5">Review <ArrowRight className="size-4" /></span>}
                   </button>
                 </div>
               )}
@@ -389,10 +362,8 @@ function ReviewRow({ label, value, mono, highlight, subtle }: { label: string; v
   return (
     <div className="flex items-center justify-between bg-white px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
       <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</span>
-      <span
-        className={`text-sm font-semibold ${mono ? 'font-mono text-xs' : ''}`}
-        style={{ color: highlight ? '#2563eb' : subtle ? 'var(--muted)' : 'var(--ink)' }}
-      >
+      <span className={`text-sm font-semibold ${mono ? 'font-mono text-xs' : ''}`}
+        style={{ color: highlight ? '#2563eb' : subtle ? 'var(--muted)' : 'var(--ink)' }}>
         {value}
       </span>
     </div>

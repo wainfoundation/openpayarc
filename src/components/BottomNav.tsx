@@ -1,4 +1,5 @@
 import { Home, Inbox, ScanQrCode, Receipt, User } from 'lucide-react'
+import { useNetwork } from '@/NetworkContext'
 
 export type NavTab = 'home' | 'inbox' | 'qr' | 'transactions' | 'profile'
 
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export default function BottomNav({ active, onTab, onQR, inboxCount = 0 }: Props) {
+  const { features } = useNetwork()
+
   const item = (tab: NavTab, icon: React.ReactNode, label: string) => {
     const isActive = active === tab
     return (
@@ -49,7 +52,7 @@ export default function BottomNav({ active, onTab, onQR, inboxCount = 0 }: Props
       }}
     >
       {item('home', <Home className="size-5" />, 'Home')}
-      {item('inbox', <Inbox className="size-5" />, 'Inbox')}
+      {features.inbox && item('inbox', <Inbox className="size-5" />, 'Inbox')}
 
       {/* Floating QR centre button */}
       <div className="flex flex-1 flex-col items-center pb-2 pt-1">
@@ -64,7 +67,7 @@ export default function BottomNav({ active, onTab, onQR, inboxCount = 0 }: Props
         <span className="mt-1 text-[10px] font-semibold" style={{ color: '#94a3b8' }}>QR</span>
       </div>
 
-      {item('transactions', <Receipt className="size-5" />, 'Transactions')}
+      {features.transactions && item('transactions', <Receipt className="size-5" />, 'Transactions')}
       {item('profile', <User className="size-5" />, 'Profile')}
     </nav>
   )
