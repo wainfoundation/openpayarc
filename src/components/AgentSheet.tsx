@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Bot, ExternalLink, Copy, Check, AlertCircle } from 'lucide-react'
-import { useAccount, useChainId } from 'wagmi'
+import { X, Bot, ExternalLink, Copy, AlertCircle, Check } from 'lucide-react'
+import { useAccount } from 'wagmi'
 import { useNetwork } from '@/NetworkContext'
 
 // ERC-8004 Identity Registry on Arc Testnet

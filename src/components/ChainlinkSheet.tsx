@@ -1,6 +1,6 @@
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, RefreshCw, TrendingUp, ExternalLink, AlertCircle } from 'lucide-react'
+import { X, TrendingUp, ExternalLink, AlertCircle, RefreshCw } from 'lucide-react'
 import { useReadContract } from 'wagmi'
 import { useNetwork } from '@/NetworkContext'
 
@@ -64,7 +64,7 @@ function PriceCard({ feed, symbol }: PriceCardProps) {
 interface Props { open: boolean; onClose: () => void }
 
 export default function ChainlinkSheet({ open, onClose }: Props) {
-  const { isTestnet, chainName } = useNetwork()
+  const { chainName, isTestnet } = useNetwork()
 
   return (
     <AnimatePresence>

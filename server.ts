@@ -23,7 +23,9 @@ const OP_CLIENT_ID     = process.env.OPENPAY_CLIENT_ID ?? ''
 const OP_CLIENT_SECRET = process.env.OPENPAY_CLIENT_SECRET ?? ''
 const OP_API_KEY       = process.env.OPENPAY_API_KEY ?? ''
 const OP_REDIRECT_URI  = process.env.OPENPAY_REDIRECT_URI ?? 'https://openpayarc.netlify.app/auth/openpay/callback'
-const OP_BASE          = 'https://openpy.space'
+// OAuth authorize UI lives at openpy.space; all API calls go to the Supabase edge function
+const OP_AUTH_BASE     = 'https://openpy.space'
+const OP_API_BASE      = 'https://araojncyittkahvvpdrn.supabase.co/functions/v1/partner-transfer-api'
 
 const apiKey        = process.env.CIRCLE_API_KEY ?? ''
 // Onramp uses the Circle API key (same key, not a separate KIT_KEY)
@@ -222,7 +224,7 @@ async function handle(req: Request): Promise<Response> {
   }
 
   // ── GET /openpay/auth-url ────────────────────────────────────────────────
-  // Returns the OAuth2 authorization URL for the partner connect flow
+  // Returns the OAuth2 authorization URL — authorize UI is at openpy.space/connect
   if (req.method === 'GET' && url.pathname === '/openpay/auth-url') {
     if (!OP_CLIENT_ID) return err('OPENPAY_CLIENT_ID not set', 503)
     const state = crypto.randomUUID()
@@ -230,26 +232,24 @@ async function handle(req: Request): Promise<Response> {
       response_type: 'code',
       client_id: OP_CLIENT_ID,
       redirect_uri: OP_REDIRECT_URI,
-      scope: 'openid profile wallet:read payments:read',
+      scope: 'profile balance email',
       state,
     })
-    const authUrl = `${OP_BASE}/oauth/authorize?${params.toString()}`
+    // Authorize URL is at openpy.space/connect (not the API base)
+    const authUrl = `${OP_AUTH_BASE}/connect?${params.toString()}`
     return json({ authUrl, state })
   }
 
   // ── POST /openpay/token ──────────────────────────────────────────────────
-  // Exchanges auth code for access token
+  // Exchanges auth code for access token via Supabase edge function
   if (req.method === 'POST' && url.pathname === '/openpay/token') {
     if (!OP_CLIENT_ID) return err('OPENPAY_CLIENT_ID not set', 503)
     const { code } = getBody<{ code?: string }>()
     if (!code) return err('code required')
     try {
-      const res = await fetch(`${OP_BASE}/oauth/token`, {
+      const res = await fetch(`${OP_API_BASE}/oauth/token`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': OP_API_KEY,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           grant_type: 'authorization_code',
           client_id: OP_CLIENT_ID,
@@ -259,24 +259,19 @@ async function handle(req: Request): Promise<Response> {
         }),
       })
       const text = await res.text()
-      try {
-        const data = JSON.parse(text)
-        return json(data, res.status)
-      } catch {
-        return json({ access_token: null, raw: text }, res.status)
-      }
+      try { return json(JSON.parse(text), res.status) }
+      catch { return json({ access_token: null, raw: text }, res.status) }
     } catch (e) { return err(String(e), 500) }
   }
 
   // ── GET /openpay/me ──────────────────────────────────────────────────────
-  // Returns connected OpenPay user profile
+  // Returns connected OpenPay user profile (name, username, avatar, account_number)
   if (req.method === 'GET' && url.pathname === '/openpay/me') {
-    const authHeader = req.headers.get('Authorization') ?? ''
-    const token = authHeader.replace('Bearer ', '').trim()
+    const token = (req.headers.get('Authorization') ?? '').replace('Bearer ', '').trim()
     if (!token) return err('Authorization header required', 401)
     try {
-      const res = await fetch(`${OP_BASE}/api/v1/me`, {
-        headers: { Authorization: `Bearer ${token}`, 'X-API-Key': OP_API_KEY },
+      const res = await fetch(`${OP_API_BASE}/user/me`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
       const text = await res.text()
       try { return json(JSON.parse(text), res.status) } catch { return json({ raw: text }, res.status) }
@@ -284,37 +279,68 @@ async function handle(req: Request): Promise<Response> {
   }
 
   // ── GET /openpay/wallet ──────────────────────────────────────────────────
-  // Returns connected OpenPay wallet info
+  // Returns connected OpenPay wallet (OUSD balance + address)
+  // /user/me with scope=balance already returns balance; this route hits it again for refresh
   if (req.method === 'GET' && url.pathname === '/openpay/wallet') {
-    const authHeader = req.headers.get('Authorization') ?? ''
-    const token = authHeader.replace('Bearer ', '').trim()
+    const token = (req.headers.get('Authorization') ?? '').replace('Bearer ', '').trim()
     if (!token) return err('Authorization header required', 401)
     try {
-      const res = await fetch(`${OP_BASE}/api/v1/wallet`, {
-        headers: { Authorization: `Bearer ${token}`, 'X-API-Key': OP_API_KEY },
+      const res = await fetch(`${OP_API_BASE}/user/me`, {
+        headers: { Authorization: `Bearer ${token}` },
       })
       const text = await res.text()
       try { return json(JSON.parse(text), res.status) } catch { return json({ raw: text }, res.status) }
     } catch (e) { return err(String(e), 500) }
   }
 
-  // ── POST /openpay/payment ────────────────────────────────────────────────
-  // Initiates a payment via OpenPay partner API
-  if (req.method === 'POST' && url.pathname === '/openpay/payment') {
-    const authHeader = req.headers.get('Authorization') ?? ''
-    const token = authHeader.replace('Bearer ', '').trim()
+  // ── POST /openpay/transfer ───────────────────────────────────────────────
+  // Send OUSD to another OpenPay account number
+  if (req.method === 'POST' && url.pathname === '/openpay/transfer') {
+    const token = (req.headers.get('Authorization') ?? '').replace('Bearer ', '').trim()
     if (!token) return err('Authorization header required', 401)
-    const body = getBody<{ amount?: string; currency?: string; recipient?: string; memo?: string }>()
+    const body = getBody<{ recipient_account?: string; amount?: number; currency?: string; memo?: string }>()
+    if (!body.recipient_account) return err('recipient_account required')
+    if (!body.amount || body.amount <= 0) return err('amount required')
     try {
-      const res = await fetch(`${OP_BASE}/api/v1/payments`, {
+      const res = await fetch(`${OP_API_BASE}/transfer`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
-          'X-API-Key': OP_API_KEY,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          recipient_account: body.recipient_account,
+          amount: body.amount,
+          currency: body.currency ?? 'OUSD',
+          memo: body.memo ?? '',
+        }),
       })
+      const text = await res.text()
+      try { return json(JSON.parse(text), res.status) } catch { return json({ raw: text }, res.status) }
+    } catch (e) { return err(String(e), 500) }
+  }
+
+  // ── GET /openpay/transactions ────────────────────────────────────────────
+  // Returns OUSD transaction history for the connected account
+  if (req.method === 'GET' && url.pathname === '/openpay/transactions') {
+    const token = (req.headers.get('Authorization') ?? '').replace('Bearer ', '').trim()
+    if (!token) return err('Authorization header required', 401)
+    try {
+      const res = await fetch(`${OP_API_BASE}/transactions`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const text = await res.text()
+      try { return json(JSON.parse(text), res.status) } catch { return json({ raw: text }, res.status) }
+    } catch (e) { return err(String(e), 500) }
+  }
+
+  // ── GET /openpay/resolve/:account ───────────────────────────────────────
+  // Resolve an OpenPay account number / username to profile (for scan-to-pay)
+  const resolveMatch = url.pathname.match(/^\/openpay\/resolve\/(.+)$/)
+  if (req.method === 'GET' && resolveMatch) {
+    const account = resolveMatch[1]
+    try {
+      const res = await fetch(`${OP_API_BASE}/resolve/${encodeURIComponent(account)}`)
       const text = await res.text()
       try { return json(JSON.parse(text), res.status) } catch { return json({ raw: text }, res.status) }
     } catch (e) { return err(String(e), 500) }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Plus, Trash2, RefreshCw, Check, ExternalLink, AlertCircle } from 'lucide-react'
+import { X, Plus, Trash2, Check, ExternalLink, AlertCircle, RefreshCw } from 'lucide-react'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain, useChainId, useReadContract } from 'wagmi'
 import { erc20Abi, isAddress, parseUnits, formatUnits } from 'viem'
 import { useNetwork } from '@/NetworkContext'
@@ -58,10 +58,10 @@ function BatchSendInner({ onClose }: { onClose: () => void }) {
   const updateRow = (i: number, field: keyof Recipient, val: string) =>
     setRecipients(r => r.map((row, j) => j === i ? { ...row, [field]: val } : row))
 
-  const handleBatchSend = () => {
+  const handleBatchSend = async () => {
     if (!validRecipients.length) return
     // Encode each transfer call
-    const { encodeFunctionData } = require('viem')
+    const { encodeFunctionData } = await import('viem')
     const calls = validRecipients.map(r => ({
       target: usdcAddress,
       allowFailure: false,
@@ -147,7 +147,7 @@ function BatchSendInner({ onClose }: { onClose: () => void }) {
         </p>
       )}
 
-      <button onClick={handleBatchSend}
+      <button onClick={() => void handleBatchSend()}
         disabled={!validRecipients.length || isPending || isConfirming || isWrongChain || totalAmount > balance}
         className="flex items-center justify-center gap-2 rounded-2xl py-4 text-base font-bold text-white disabled:opacity-50"
         style={{ background: '#1d2f50' }}>

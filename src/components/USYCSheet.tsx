@@ -6,7 +6,7 @@ import { useNetwork } from '@/NetworkContext'
 interface Props { open: boolean; onClose: () => void }
 
 export default function USYCSheet({ open, onClose }: Props) {
-  const { isTestnet, chainName } = useNetwork()
+  useNetwork()
 
   return (
     <AnimatePresence>
