@@ -109,7 +109,7 @@ const NetworkContext = createContext<NetworkContextValue | null>(null)
 
 const NETWORK_KEY  = 'openpay:network'
 const METHODS_KEY  = 'openpay:payment-methods'
-const FEATURES_KEY = 'openpay:features'
+const FEATURES_KEY = 'openpay:features-v2' // bumped to reset stale caches missing eurc/usyc/cirbtc
 
 function readStoredMode(): NetworkMode {
   try {

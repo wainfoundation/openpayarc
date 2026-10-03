@@ -37,19 +37,21 @@ import './index.css'
 function AutoCloseOnConnect() {
   const { isConnected } = useAccount()
   const { open, setOpen } = useModal()
-  // Track whether wallet was already connected when modal last opened
   const wasConnectedOnOpen = useRef(false)
 
   useEffect(() => {
     if (open) {
-      // Record connection state at the moment the modal opens
       wasConnectedOnOpen.current = isConnected
+      // If already connected when modal opens, close it immediately —
+      // the wallet button should show the account view, not the connect flow
+      if (isConnected) {
+        setOpen(false)
+      }
     }
-  }, [open, isConnected])
+  }, [open, isConnected, setOpen])
 
   useEffect(() => {
-    // Only auto-close if wallet was NOT connected when modal opened
-    // (fresh connect flow completed)
+    // Also close when a fresh connect completes mid-flow
     if (isConnected && open && !wasConnectedOnOpen.current) {
       setOpen(false)
     }

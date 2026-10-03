@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useAccount, useReadContract, useSwitchChain, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { useAccount, useReadContract, useSwitchChain, useWriteContract, useWaitForTransactionReceipt, useDisconnect } from 'wagmi'
 import { erc20Abi, isAddress } from 'viem'
 import {
   Grid2x2, Bell, EyeOff, Eye, ArrowDownToLine, SendHorizonal,
@@ -9,8 +9,9 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { TokenUSDC } from '@web3icons/react'
-import { ConnectKitButton } from 'connectkit'
+import { useModal } from 'connectkit'
 import { getUsdc, buildTxExplorerUrl } from '@/onchain-facts'
+import { getArcToken } from '@/arcTokens'
 import { Amount, parseAmount, usdcDecimalsFor } from '@/onchain-money'
 
 import { useNetwork } from '@/NetworkContext'
@@ -487,7 +488,7 @@ function ProfileTab({
               }
               {address && <p className="mono text-xs text-slate-400">{formatAddress(address)}</p>}
             </div>
-            <ConnectKitButton />
+            <WalletHeaderButton />
           </div>
         </div>
 
@@ -838,6 +839,39 @@ function HomeScreen({
   // OUSD balance — shown on both networks, disabled when not yet deployed
   const ousdTokenAddr = getOusdToken(targetChainId)
   const ousdDeployed  = isOusdDeployed(targetChainId)
+
+  // EURC balance
+  const eurcToken = getArcToken(targetChainId, 'EURC')
+  const { data: rawEurcBal } = useReadContract({
+    address: eurcToken?.address,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address && eurcToken?.address), refetchInterval: 12_000 },
+  })
+  const fmtEurc = rawEurcBal != null ? (Number(rawEurcBal) / 1e6).toFixed(2) : '0.00'
+
+  // USYC balance
+  const usycToken = getArcToken(targetChainId, 'USYC')
+  const { data: rawUsycBal } = useReadContract({
+    address: usycToken?.address,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address && usycToken?.address), refetchInterval: 12_000 },
+  })
+  const fmtUsyc = rawUsycBal != null ? (Number(rawUsycBal) / 1e6).toFixed(2) : '0.00'
+
+  // cirBTC balance
+  const cirbtcToken = getArcToken(targetChainId, 'cirBTC')
+  const { data: rawCirbtcBal } = useReadContract({
+    address: cirbtcToken?.address,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address && cirbtcToken?.address), refetchInterval: 12_000 },
+  })
+  const fmtCirbtc = rawCirbtcBal != null ? (Number(rawCirbtcBal) / 1e8).toFixed(6) : '0.000000'
   const { data: rawOusdBalance, isLoading: ousdBalanceLoading } = useReadContract({
     address: ousdTokenAddr,
     abi: erc20Abi,
@@ -901,6 +935,39 @@ function HomeScreen({
               {isTestnet ? 'USDC · Testnet' : 'USDC'}
             </span>
           </div>
+
+          {/* EURC balance row */}
+          {isConnected && features.eurc && eurcToken?.address && (
+            <div className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2 cursor-pointer hover:opacity-90 transition-opacity" style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }} onClick={onEurc}>
+              <span className="flex size-5 items-center justify-center rounded-full text-[10px] font-black text-white" style={{ background: '#0052FF' }}>€</span>
+              <span className="text-xs font-bold tabular-nums" style={{ color: '#0052FF' }}>
+                {balanceHidden ? '••••' : `${fmtEurc} EURC`}
+              </span>
+              <span className="ml-auto text-[10px] font-semibold text-blue-400">Euro Coin</span>
+            </div>
+          )}
+
+          {/* USYC balance row */}
+          {isConnected && features.usyc && usycToken?.address && (
+            <div className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2 cursor-pointer hover:opacity-90 transition-opacity" style={{ background: '#F0FDF4', border: '1px solid #BBF7D0' }} onClick={onUsyc}>
+              <span className="flex size-5 items-center justify-center rounded-full text-[10px] font-black text-white" style={{ background: '#16A34A' }}>⬡</span>
+              <span className="text-xs font-bold tabular-nums" style={{ color: '#16A34A' }}>
+                {balanceHidden ? '••••' : `${fmtUsyc} USYC`}
+              </span>
+              <span className="ml-auto text-[10px] font-semibold text-green-400">US Yield Coin</span>
+            </div>
+          )}
+
+          {/* cirBTC balance row — testnet only */}
+          {isConnected && features.cirbtc && cirbtcToken?.address && (
+            <div className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+              <span className="flex size-5 items-center justify-center rounded-full text-[10px] font-black text-white" style={{ background: '#F7931A' }}>₿</span>
+              <span className="text-xs font-bold tabular-nums" style={{ color: '#F7931A' }}>
+                {balanceHidden ? '••••' : `${fmtCirbtc} cirBTC`}
+              </span>
+              <span className="ml-auto text-[10px] font-semibold text-amber-400">Circle Bitcoin</span>
+            </div>
+          )}
 
           {/* OUSD balance row — gated by ousd feature flag */}
           {isConnected && features.ousd && (
@@ -1075,6 +1142,104 @@ function HomeScreen({
         )}
       </div>
 
+      {/* Token Portfolio — OKX style */}
+      {isConnected && (
+        <div className="mx-4 mt-3 rounded-3xl bg-white shadow-sm overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+            <h3 className="text-sm font-bold" style={{ color: 'var(--ink)' }}>Tokens</h3>
+            <span className="text-xs text-slate-400">{isTestnet ? 'Arc Testnet' : 'Arc Mainnet'}</span>
+          </div>
+          <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+            {/* USDC */}
+            <div className="flex items-center gap-3 px-4 py-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full" style={{ background: '#EFF6FF' }}>
+                <TokenUSDC variant="branded" size={22} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>USDC</p>
+                <p className="text-xs text-slate-400">USD Coin</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+                  {balanceHidden ? '••••' : `$${formattedBalance ?? '0.00'}`}
+                </p>
+                <p className="text-xs text-slate-400">{balanceHidden ? '••' : `${formattedBalance ?? '0.00'} USDC`}</p>
+              </div>
+            </div>
+
+            {/* EURC */}
+            {features.eurc && eurcToken?.address && (
+              <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors" onClick={onEurc}>
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full text-lg font-black text-white" style={{ background: '#0052FF' }}>€</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>EURC</p>
+                  <p className="text-xs text-slate-400">Euro Coin</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+                    {balanceHidden ? '••••' : `${fmtEurc} EURC`}
+                  </p>
+                  <p className="text-xs text-slate-400">≈ ${fmtEurc}</p>
+                </div>
+              </div>
+            )}
+
+            {/* USYC */}
+            {features.usyc && usycToken?.address && (
+              <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors" onClick={onUsyc}>
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full text-lg font-black text-white" style={{ background: '#16A34A' }}>⬡</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>USYC</p>
+                  <p className="text-xs text-slate-400">US Yield Coin</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+                    {balanceHidden ? '••••' : `${fmtUsyc} USYC`}
+                  </p>
+                  <p className="text-xs text-slate-400 text-green-500 font-medium">T-Bill yield</p>
+                </div>
+              </div>
+            )}
+
+            {/* cirBTC */}
+            {features.cirbtc && cirbtcToken?.address && (
+              <div className="flex items-center gap-3 px-4 py-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full text-lg font-black text-white" style={{ background: '#F7931A' }}>₿</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>cirBTC</p>
+                  <p className="text-xs text-slate-400">Circle Bitcoin</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+                    {balanceHidden ? '••••' : `${fmtCirbtc} BTC`}
+                  </p>
+                  <p className="text-xs text-slate-400">{isTestnet ? 'Testnet' : 'Coming soon'}</p>
+                </div>
+              </div>
+            )}
+
+            {/* OUSD */}
+            {features.ousd && (
+              <div className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-50 transition-colors" onClick={onOusd}>
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full">
+                  <OUSDIcon size={36} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>OUSD</p>
+                  <p className="text-xs text-slate-400">OpenPay OpenUSD</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--ink)' }}>
+                    {balanceHidden ? '••••' : `${formattedOusdBalance ?? '0.00'} OUSD`}
+                  </p>
+                  <p className="text-xs" style={{ color: '#0D47D1' }}>1:1 USD</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Recent */}
       <div className="mx-4 mt-3 rounded-3xl bg-white p-4 shadow-sm" style={{ border: '1px solid var(--border)' }}>
         <div className="mb-3 flex items-center justify-between">
@@ -1149,6 +1314,96 @@ function HomeScreen({
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── Wallet header button ─────────────────────────────────────────────────────
+// Shows address pill when connected (tap → disconnect popover).
+// Shows "Connect wallet" via ConnectKit when disconnected.
+
+function WalletHeaderButton() {
+  const { address, isConnected } = useAccount()
+  const { setOpen } = useModal()
+  const { disconnect } = useDisconnect()
+  const { mode, setMode } = useNetwork()
+  const [showMenu, setShowMenu] = useState(false)
+
+  if (!isConnected || !address) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold text-white shadow transition-all active:scale-95"
+        style={{ background: '#1d2f50' }}
+      >
+        Connect wallet
+      </button>
+    )
+  }
+
+  const short = `${address.slice(0, 6)}····${address.slice(-4)}`
+  const isMainnet = mode === 'mainnet'
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowMenu(v => !v)}
+        className="flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold text-white shadow transition-all active:scale-95"
+        style={{ background: '#1d2f50' }}
+      >
+        <span className="size-5 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 shrink-0" />
+        <span className="hidden xs:inline">{short}</span>
+      </button>
+      {showMenu && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+          <div
+            className="absolute right-0 top-full mt-2 z-50 rounded-2xl shadow-xl border overflow-hidden"
+            style={{ background: 'var(--surface)', borderColor: 'var(--border)', minWidth: 220 }}
+          >
+            {/* Address */}
+            <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
+              <p className="text-xs text-slate-400 mb-0.5">Connected</p>
+              <p className="font-mono text-sm font-semibold" style={{ color: 'var(--ink)' }}>{short}</p>
+            </div>
+            {/* Network selector */}
+            <div className="px-4 py-3 border-b" style={{ borderColor: 'var(--border)' }}>
+              <p className="text-xs text-slate-400 mb-2">Network</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setMode('testnet'); setShowMenu(false) }}
+                  className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{
+                    background: !isMainnet ? '#0D47D1' : 'var(--bg)',
+                    color: !isMainnet ? '#fff' : 'var(--muted)',
+                    border: `1px solid ${!isMainnet ? '#0D47D1' : 'var(--border)'}`,
+                  }}
+                >
+                  Testnet
+                </button>
+                <button
+                  onClick={() => { setMode('mainnet'); setShowMenu(false) }}
+                  className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                  style={{
+                    background: isMainnet ? '#0D47D1' : 'var(--bg)',
+                    color: isMainnet ? '#fff' : 'var(--muted)',
+                    border: `1px solid ${isMainnet ? '#0D47D1' : 'var(--border)'}`,
+                  }}
+                >
+                  Mainnet
+                </button>
+              </div>
+            </div>
+            {/* Disconnect */}
+            <button
+              onClick={() => { disconnect(); setShowMenu(false) }}
+              className="w-full px-4 py-3 text-left text-sm font-medium text-red-500 hover:bg-red-50 transition-colors"
+            >
+              Disconnect
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -1328,7 +1583,7 @@ export default function App() {
             </button>
 
             {/* Wallet connect */}
-            <ConnectKitButton />
+            <WalletHeaderButton />
           </div>
         </div>
 
